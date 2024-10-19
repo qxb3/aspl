@@ -9,3 +9,17 @@ set msg "The apple count is: "
 set count 10
 logl msg count # The apple count is: 10
 ```
+
+## Using
+
+### Installation
+
+```
+cargo install aspl
+```
+
+### Running
+
+```
+aspl <input.aspl>
+```
