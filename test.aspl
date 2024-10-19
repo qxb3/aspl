@@ -1,0 +1,7 @@
+logl "start program"
+set foo 69
+set msg "hello, world"
+logl msg
+logl foo
+logl "foo bar"
+log "hello"
