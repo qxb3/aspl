@@ -24,7 +24,7 @@ pub enum NodeKind {
 
 #[derive(Debug)]
 pub struct Node {
-    pub kind: NodeKind
+    pub r#type: NodeKind
 }
 
 pub fn parse(source_tokens: Vec<Token>) -> Vec<Node> {
@@ -32,10 +32,9 @@ pub fn parse(source_tokens: Vec<Token>) -> Vec<Node> {
     let mut tokens = source_tokens.iter().peekable();
 
     while let Some(token) = tokens.next() {
-        if token.kind == TokenKind::Command && token.value.as_ref().unwrap() == "set" {
-
+        if token.r#type == TokenKind::Command && token.value.as_ref().unwrap() == "set" {
             let identifier = match tokens.peek() {
-                Some(curr_token) => if curr_token.kind == TokenKind::Identifier {
+                Some(curr_token) => if curr_token.r#type == TokenKind::Identifier {
                     curr_token.value.as_ref().unwrap()
                 } else {
                     println!("Syntax error on command: set");
@@ -50,7 +49,7 @@ pub fn parse(source_tokens: Vec<Token>) -> Vec<Node> {
             tokens.next();
 
             let variable = match tokens.peek() {
-                Some(curr_token) => match curr_token.kind {
+                Some(curr_token) => match curr_token.r#type {
                     TokenKind::StringLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeKind::String(curr_token.value.clone().unwrap()) },
                     TokenKind::IntLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeKind::Int(curr_token.value.clone().unwrap().parse::<i32>().unwrap()) },
                     _ => {
@@ -64,30 +63,29 @@ pub fn parse(source_tokens: Vec<Token>) -> Vec<Node> {
                 }
             };
 
-            nodes.push(Node { kind: NodeKind::Variable(variable) });
+            nodes.push(Node { r#type: NodeKind::Variable(variable) });
         }
 
-        let log_type = token.value.as_ref().unwrap();
-        if token.kind == TokenKind::Command && (log_type == "log" || log_type == "logl") {
-            let mut args: Vec<ExprNodeKind> = Vec::new();
+        match token.value.as_ref().unwrap().as_str() {
+            log_type if log_type == "log" || log_type == "logl" => {
+                let mut args: Vec<ExprNodeKind> = Vec::new();
 
-            while let Some(curr_token) = tokens.peek() {
-                if curr_token.kind == TokenKind::Identifier {
-                    args.push(ExprNodeKind::Identifier(tokens.next().unwrap().value.clone().unwrap()));
-                } else if curr_token.kind == TokenKind::StringLiteral {
-                    args.push(ExprNodeKind::String(tokens.next().unwrap().value.clone().unwrap()));
-                } else if curr_token.kind == TokenKind::IntLiteral {
-                    args.push(ExprNodeKind::String(tokens.next().unwrap().value.clone().unwrap()));
-                } else {
-                    break;
+                while let Some(curr_token) = tokens.peek() {
+                    match curr_token.r#type {
+                        TokenKind::Identifier => { args.push(ExprNodeKind::Identifier(tokens.next().unwrap().value.clone().unwrap())); },
+                        TokenKind::StringLiteral => { args.push(ExprNodeKind::String(tokens.next().unwrap().value.clone().unwrap())); },
+                        TokenKind::IntLiteral => { args.push(ExprNodeKind::String(tokens.next().unwrap().value.clone().unwrap())); },
+                        _ => break
+                    }
                 }
-            }
 
-            if log_type == "log" {
-                nodes.push(Node { kind: NodeKind::Log(args) });
-            } else if log_type == "logl" {
-                nodes.push(Node { kind: NodeKind::Logl(args) });
-            }
+                match log_type {
+                    "log" => { nodes.push(Node { r#type: NodeKind::Log(args) }); },
+                    "logl" => { nodes.push(Node { r#type: NodeKind::Logl(args) }); },
+                    _ => unreachable!()
+                }
+            },
+            _ => unreachable!()
         }
     }
 

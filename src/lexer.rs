@@ -8,7 +8,7 @@ pub enum TokenKind {
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    pub kind: TokenKind,
+    pub r#type: TokenKind,
     pub value: Option<String>
 }
 
@@ -32,7 +32,7 @@ pub fn lex(source: &str) -> Vec<Token> {
             // Ignore the current '"'
             chars.next();
 
-            tokens.push(Token { kind: TokenKind::StringLiteral, value: Some(buffer) });
+            tokens.push(Token { r#type: TokenKind::StringLiteral, value: Some(buffer) });
             continue;
         }
 
@@ -50,7 +50,7 @@ pub fn lex(source: &str) -> Vec<Token> {
                 }
             }
 
-            tokens.push(Token { kind: TokenKind::IntLiteral, value: Some(buffer) });
+            tokens.push(Token { r#type: TokenKind::IntLiteral, value: Some(buffer) });
             continue;
         }
 
@@ -70,10 +70,10 @@ pub fn lex(source: &str) -> Vec<Token> {
 
             // Check if its a command or an identifier
             match buffer.as_str() {
-                "log" => { tokens.push(Token { kind: TokenKind::Command, value: Some(buffer) }); },
-                "logl" => { tokens.push(Token { kind: TokenKind::Command, value: Some(buffer) }); },
-                "set" => { tokens.push(Token { kind: TokenKind::Command, value: Some(buffer) }); },
-                _ => { tokens.push(Token { kind: TokenKind::Identifier, value: Some(buffer) }) }
+                "log" => { tokens.push(Token { r#type: TokenKind::Command, value: Some(buffer) }); },
+                "logl" => { tokens.push(Token { r#type: TokenKind::Command, value: Some(buffer) }); },
+                "set" => { tokens.push(Token { r#type: TokenKind::Command, value: Some(buffer) }); },
+                _ => { tokens.push(Token { r#type: TokenKind::Identifier, value: Some(buffer) }) }
             }
 
             continue;
