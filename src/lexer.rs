@@ -1,7 +1,7 @@
 use std::{iter::Peekable, str::Chars};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TokenKind {
+pub enum TokenTypes {
     Identifier,
     Command,
     StringLiteral,
@@ -11,7 +11,7 @@ pub enum TokenKind {
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    pub r#type: TokenKind,
+    pub r#type: TokenTypes,
     pub value: Option<String>,
     pub col: usize,
     pub line: usize
@@ -42,7 +42,7 @@ impl Lexer {
         chars.next();
         *col += 1;
 
-        self.tokens.push(Token { r#type: TokenKind::StringLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
+        self.tokens.push(Token { r#type: TokenTypes::StringLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
     }
 
     fn lex_int_lit(&mut self, char: char, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
@@ -59,7 +59,7 @@ impl Lexer {
             }
         }
 
-        self.tokens.push(Token { r#type: TokenKind::IntLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
+        self.tokens.push(Token { r#type: TokenTypes::IntLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
     }
 
     fn lex_command(&mut self, char: char, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
@@ -78,9 +78,9 @@ impl Lexer {
         *col += buffer.len();
 
         match buffer.as_str() {
-            "log" | "logl" | "set"      => { self.tokens.push(Token { r#type: TokenKind::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            "true" | "false"            => { self.tokens.push(Token { r#type: TokenKind::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            _                           => { self.tokens.push(Token { r#type: TokenKind::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
+            "log" | "logl" | "set"      => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            "true" | "false"            => { self.tokens.push(Token { r#type: TokenTypes::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            _                           => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
         }
     }
 

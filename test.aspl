@@ -5,7 +5,7 @@ set str "hello, world"
 set bool true
 
 logl "variables:"
-logl "int: " in
+logl "int: " int
 logl "str: " str
 logl "bool: " bool
 
