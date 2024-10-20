@@ -8,36 +8,48 @@ pub fn run(ast: Vec<Node>) {
     while let Some(node) = nodes.next() {
         match &node.r#type {
             NodeKind::Log(args) => {
+                let mut output = String::new();
+
                 for arg in args {
                     match arg {
-                        ExprNodeKind::String(value) => { print!("{value}"); },
-                        ExprNodeKind::Int(value) => { print!("{value}"); },
+                        ExprNodeKind::String(value) => { output.push_str(value); },
+                        ExprNodeKind::Int(value) => { output.push_str(value.to_string().as_str()); },
+                        ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); },
                         ExprNodeKind::Identifier(name) => {
                             let variable = find_variable(ast.iter().peekable(), name.to_string());
                             match &variable.value {
-                                ExprNodeKind::String(str) => { print!("{str}"); },
-                                ExprNodeKind::Int(int) => { print!("{int}"); },
+                                ExprNodeKind::String(str) => { output.push_str(str); },
+                                ExprNodeKind::Int(int) => { output.push_str(int.to_string().as_str()); },
+                                ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); }
                                 _ => {}
                             }
                         }
                     }
                 }
+
+                print!("{output}");
             },
             NodeKind::Logl(args) => {
+                let mut output = String::new();
+
                 for arg in args {
                     match arg {
-                        ExprNodeKind::String(value) => { println!("{value}"); },
-                        ExprNodeKind::Int(value) => { println!("{value}"); },
+                        ExprNodeKind::String(value) => { output.push_str(value); },
+                        ExprNodeKind::Int(value) => { output.push_str(value.to_string().as_str()); },
+                        ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); },
                         ExprNodeKind::Identifier(name) => {
                             let variable = find_variable(ast.iter().peekable(), name.to_string());
                             match &variable.value {
-                                ExprNodeKind::String(str) => { println!("{str}"); },
-                                ExprNodeKind::Int(int) => { println!("{int}"); },
+                                ExprNodeKind::String(str) => { output.push_str(str); },
+                                ExprNodeKind::Int(int) => { output.push_str(int.to_string().as_str()); },
+                                ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); }
                                 _ => {}
                             }
                         }
                     }
                 }
+
+                println!("{output}");
             },
             _ => {}
         }

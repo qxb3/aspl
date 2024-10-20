@@ -3,6 +3,8 @@ mod parser;
 mod interpreter;
 
 use std::{env, fs, process::exit};
+use lexer::Lexer;
+use parser::Parser;
 
 fn main() {
     let source_file = match env::args().nth(1) {
@@ -22,7 +24,11 @@ fn main() {
         }
     };
 
-    let tokens = lexer::lex(source.as_str());
-    let ast = parser::parse(tokens);
+    let mut lexer = Lexer::new();
+    let mut parser = Parser::new();
+
+    let tokens = lexer.lex(source.as_str());
+    let ast = parser.parse(tokens);
+
     interpreter::run(ast);
 }

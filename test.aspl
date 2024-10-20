@@ -1,7 +1,13 @@
 logl "start program"
-set foo 69
-set msg "hello, world"
-logl msg
-logl foo
-logl "foo bar"
-log "hello"
+
+set int 69
+set str "hello, world"
+set bool false
+
+logl "variables:"
+logl "int: " int
+logl "str: " str
+logl "bool: " bool
+
+log "hello "
+log "world"
