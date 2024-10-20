@@ -1,8 +1,8 @@
 use crate::parser::{ExprNodeKind, Node, NodeKind, VariableNode};
-use std::{iter::Peekable, process::exit};
+use std::iter::Peekable;
 use inline_colorization::*;
 
-pub fn run(ast: Vec<Node>) {
+pub fn run(ast: Vec<Node>) -> Result<(), String> {
     let mut nodes = ast.iter().peekable();
 
     while let Some(node) = nodes.next() {
@@ -24,10 +24,7 @@ pub fn run(ast: Vec<Node>) {
                                     ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); },
                                     _ => ()
                                 },
-                                Err(_) => {
-                                    println!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", name.to_string());
-                                    exit(1);
-                                }
+                                Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", name))
                             }
                         }
                     }
@@ -52,10 +49,7 @@ pub fn run(ast: Vec<Node>) {
                                     ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); },
                                     _ => ()
                                 },
-                                Err(_) => {
-                                    println!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", name.to_string());
-                                    exit(1);
-                                }
+                                Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", name))
                             }
                         }
                     }
@@ -66,6 +60,8 @@ pub fn run(ast: Vec<Node>) {
             _ => {}
         }
     }
+
+    Ok(())
 }
 
 fn find_variable(mut nodes: Peekable<std::slice::Iter<Node>>, name: String) -> Result<VariableNode, ()> {
