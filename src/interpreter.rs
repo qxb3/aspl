@@ -1,6 +1,6 @@
-use std::{iter::Peekable, process::exit};
-
 use crate::parser::{ExprNodeKind, Node, NodeKind, VariableNode};
+use std::{iter::Peekable, process::exit};
+use inline_colorization::*;
 
 pub fn run(ast: Vec<Node>) {
     let mut nodes = ast.iter().peekable();
@@ -16,12 +16,18 @@ pub fn run(ast: Vec<Node>) {
                         ExprNodeKind::Int(value) => { output.push_str(value.to_string().as_str()); },
                         ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); },
                         ExprNodeKind::Identifier(name) => {
-                            let variable = find_variable(ast.iter().peekable(), name.to_string());
-                            match &variable.value {
-                                ExprNodeKind::String(str) => { output.push_str(str); },
-                                ExprNodeKind::Int(int) => { output.push_str(int.to_string().as_str()); },
-                                ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); }
-                                _ => {}
+                            let result = find_variable(ast.iter().peekable(), name.to_string());
+                            match &result {
+                                Ok(variable) => match &variable.value {
+                                    ExprNodeKind::String(str) => { output.push_str(str.as_str()); },
+                                    ExprNodeKind::Int(int) => { output.push_str(int.to_string().as_str()); },
+                                    ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); },
+                                    _ => ()
+                                },
+                                Err(_) => {
+                                    println!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", name.to_string());
+                                    exit(1);
+                                }
                             }
                         }
                     }
@@ -38,12 +44,18 @@ pub fn run(ast: Vec<Node>) {
                         ExprNodeKind::Int(value) => { output.push_str(value.to_string().as_str()); },
                         ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); },
                         ExprNodeKind::Identifier(name) => {
-                            let variable = find_variable(ast.iter().peekable(), name.to_string());
-                            match &variable.value {
-                                ExprNodeKind::String(str) => { output.push_str(str); },
-                                ExprNodeKind::Int(int) => { output.push_str(int.to_string().as_str()); },
-                                ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); }
-                                _ => {}
+                            let result = find_variable(ast.iter().peekable(), name.to_string());
+                            match &result {
+                                Ok(variable) => match &variable.value {
+                                    ExprNodeKind::String(str) => { output.push_str(str.as_str()); },
+                                    ExprNodeKind::Int(int) => { output.push_str(int.to_string().as_str()); },
+                                    ExprNodeKind::Boolean(value) => { output.push_str(value.to_string().as_str()); },
+                                    _ => ()
+                                },
+                                Err(_) => {
+                                    println!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", name.to_string());
+                                    exit(1);
+                                }
                             }
                         }
                     }
@@ -56,18 +68,17 @@ pub fn run(ast: Vec<Node>) {
     }
 }
 
-fn find_variable(mut nodes: Peekable<std::slice::Iter<Node>>, name: String) -> VariableNode {
+fn find_variable(mut nodes: Peekable<std::slice::Iter<Node>>, name: String) -> Result<VariableNode, ()> {
     while let Some(node) = nodes.next() {
         match &node.r#type {
             NodeKind::Variable(variable) => {
                 if variable.name == name {
-                    return variable.clone();
+                    return Ok(variable.clone());
                 }
             },
             _ => {}
         }
     }
 
-    println!("Error: Cannot find variable: {name}");
-    exit(1);
+    Err(())
 }

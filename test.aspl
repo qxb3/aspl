@@ -2,10 +2,10 @@ logl "start program"
 
 set int 69
 set str "hello, world"
-set bool false
+set bool true
 
 logl "variables:"
-logl "int: " int
+logl "int: " in
 logl "str: " str
 logl "bool: " bool
 

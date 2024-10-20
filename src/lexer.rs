@@ -12,7 +12,9 @@ pub enum TokenKind {
 #[derive(Debug, Clone)]
 pub struct Token {
     pub r#type: TokenKind,
-    pub value: Option<String>
+    pub value: Option<String>,
+    pub col: usize,
+    pub line: usize
 }
 
 pub struct Lexer {
@@ -24,12 +26,13 @@ impl Lexer {
         Self { tokens: Vec::new() }
     }
 
-    fn lex_string_lit(&mut self, chars: &mut Peekable<Chars>) {
+    fn lex_string_lit(&mut self, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
         let mut buffer = String::new();
 
         while let Some(curr_char) = chars.peek() {
             if curr_char != &'"' {
                 buffer.push(chars.next().unwrap());
+                *col += 1;
             } else {
                 break;
             }
@@ -37,11 +40,12 @@ impl Lexer {
 
         // Ignore the current '"'
         chars.next();
+        *col += 1;
 
-        self.tokens.push(Token { r#type: TokenKind::StringLiteral, value: Some(buffer) });
+        self.tokens.push(Token { r#type: TokenKind::StringLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
     }
 
-    fn lex_int_lit(&mut self, char: char, chars: &mut Peekable<Chars>) {
+    fn lex_int_lit(&mut self, char: char, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
         let mut buffer = String::new();
 
         buffer.push(char);
@@ -49,15 +53,16 @@ impl Lexer {
         while let Some(curr_char) = chars.peek() {
             if curr_char.is_numeric() {
                 buffer.push(chars.next().unwrap());
+                *col += 1;
             } else {
                 break;
             }
         }
 
-        self.tokens.push(Token { r#type: TokenKind::IntLiteral, value: Some(buffer) });
+        self.tokens.push(Token { r#type: TokenKind::IntLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
     }
 
-    fn lex_command(&mut self, char: char, chars: &mut Peekable<Chars>) {
+    fn lex_command(&mut self, char: char, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
         let mut buffer = String::new();
 
         buffer.push(char);
@@ -70,33 +75,42 @@ impl Lexer {
             }
         }
 
+        *col += buffer.len();
+
         match buffer.as_str() {
-            "log" | "logl" | "set"      => { self.tokens.push(Token { r#type: TokenKind::Command, value: Some(buffer) }); },
-            "true" | "false"            => { self.tokens.push(Token { r#type: TokenKind::Boolean, value: Some(buffer) }); },
-            _                           => { self.tokens.push(Token { r#type: TokenKind::Identifier, value: Some(buffer) }) }
+            "log" | "logl" | "set"      => { self.tokens.push(Token { r#type: TokenKind::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            "true" | "false"            => { self.tokens.push(Token { r#type: TokenKind::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            _                           => { self.tokens.push(Token { r#type: TokenKind::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
         }
     }
 
     pub fn lex(&mut self, source: &str) -> Vec<Token> {
         let mut chars = source.chars().peekable();
+        let mut line: usize = 1;
+        let mut col: usize = 1;
 
         while let Some(char) = chars.next() {
             // Check if string literal
             if char == '"' {
-                self.lex_string_lit(&mut chars);
+                self.lex_string_lit(&mut chars, &mut line, &mut col);
                 continue;
             }
 
             // Check if int literal
             if char.is_numeric() {
-                self.lex_int_lit(char, &mut chars);
+                self.lex_int_lit(char, &mut chars, &mut line, &mut col);
                 continue;
             }
 
             // Check if its command / identifier / boolean
             if char.is_alphanumeric() && !char.is_numeric() {
-                self.lex_command(char, &mut chars);
+                self.lex_command(char, &mut chars, &mut line, &mut col);
                 continue;
+            }
+
+            if char == '\n' {
+                line += 1;
+                col = 1;
             }
         }
 

@@ -1,5 +1,6 @@
-use std::{iter::Peekable, process::exit};
 use crate::lexer::{Token, TokenKind};
+use std::{iter::Peekable, process::exit};
+use inline_colorization::*;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ExprNodeKind {
@@ -39,14 +40,10 @@ impl Parser {
 
     fn parse_variable(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) {
         let identifier = match tokens.peek() {
-            Some(curr_token) => if curr_token.r#type == TokenKind::Identifier {
-                curr_token.value.as_ref().unwrap()
-            } else {
-                println!("Syntax error on command: set");
-                exit(1);
-            },
-            None => {
-                println!("Syntax error on command: set");
+            Some(curr_token) if curr_token.r#type == TokenKind::Identifier => { curr_token.value.as_ref().unwrap() },
+            curr_token => {
+                println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'set'");
+                println!("{color_yellow}Position{color_reset} -> {}:{}", curr_token.unwrap().line, curr_token.unwrap().col);
                 exit(1);
             }
         };
@@ -59,12 +56,14 @@ impl Parser {
                 TokenKind::IntLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeKind::Int(curr_token.value.clone().unwrap().parse::<i32>().unwrap()) },
                 TokenKind::Boolean => VariableNode { name: identifier.to_string(), value: ExprNodeKind::Boolean(curr_token.value.clone().unwrap().parse::<bool>().unwrap()) },
                 _ => {
-                    println!("Syntax error on command: set");
+                    println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Unknown Identifier '{}'", curr_token.value.as_ref().unwrap());
+                    println!("{color_yellow}Position{color_reset} -> {}:{}", curr_token.line, curr_token.col);
                     exit(1);
                 }
             },
-            None => {
-                println!("Syntax error on command: set");
+            curr_token => {
+                println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'set'");
+                println!("{color_yellow}Position{color_reset} -> {}:{}", curr_token.unwrap().line, curr_token.unwrap().col);
                 exit(1);
             }
         };
@@ -97,7 +96,7 @@ impl Parser {
 
         while let Some(token) = tokens.next() {
             match token {
-                Token { r#type: TokenKind::Command, value: Some(command) } => {
+                Token { r#type: TokenKind::Command, value: Some(command), .. } => {
                     if command == "set" { self.parse_variable(&mut tokens); }
                     if command == "log" || command == "logl" { self.parse_log(&mut tokens, command); }
                 },

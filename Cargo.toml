@@ -7,3 +7,4 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
+inline_colorization = "0.1.6"
