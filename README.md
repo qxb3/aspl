@@ -1,6 +1,7 @@
-# aspl - A Shitty Programming Language
+# aspl - A Simple Programming Language
 
-A really shitty bash, command like programming language.
+**aspl** is a simple, intuitive programming language inspired by the Bash shell and Unix command-like systems.
+It is designed to streamline scripting tasks and command execution with a syntax that feels familiar to those accustomed to Unix environments.
 
 ## Language
 
@@ -36,3 +37,7 @@ cargo install aspl
 ```
 aspl <input.aspl>
 ```
+
+## LICENSE
+
+[LICENSE](https://github.com/qxb3/eiv/blob/main/LICENSE)

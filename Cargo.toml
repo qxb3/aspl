@@ -1,9 +1,9 @@
 [package]
 name = "aspl"
-description = "A Really Shitty Programming Language"
-license = "Unlicense"
+description = "A Simple Programming Language."
+license = "MIT"
 repository = "https://github.com/qxb3/aspl"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 
 [dependencies]
