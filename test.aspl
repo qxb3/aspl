@@ -1,5 +1,5 @@
-check 5 < 4 {
-  logl "5 is greater than 4"
+check 5 == 5 {
+  logl "5 is equals to 5"
 }
 
 logl "start program"

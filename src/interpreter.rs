@@ -46,6 +46,15 @@ impl Interpreter {
         if let LiteralTypes::Int(left_value) = comparison_node.left {
             if let LiteralTypes::Int(right_value) = comparison_node.right {
                 match comparison_node.comparison {
+                    TokenTypes::EqEq => {
+                        if left_value == right_value {
+                            while let Some(curr_node) = children.next() {
+                                if let Err(err) = self.execute_node(ast, curr_node) {
+                                    return Err(err);
+                                }
+                            }
+                        }
+                    },
                     TokenTypes::GThan => {
                         if left_value > right_value {
                             while let Some(curr_node) = children.next() {
