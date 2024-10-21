@@ -43,120 +43,199 @@ impl Interpreter {
     }
 
     fn handle_check(&self, ast: &Vec<Node>, comparison_node: &ComparisonNode, mut childrens: Peekable<std::slice::Iter<Node>>) -> Result<(), String> {
-        let handle_comparison_int = |left_value: &i32, right_value: &i32, comparison: &TokenTypes, childrens: &mut Peekable<std::slice::Iter<'_, Node>>| {
-            match comparison {
-                TokenTypes::EqEq => {
-                    if left_value == right_value {
-                        while let Some(curr_node) = childrens.next() {
-                            if let Err(err) = self.execute_node(ast, curr_node) {
-                                return Err(err);
-                            }
-                        }
-                    }
-                },
-                TokenTypes::GThan => {
-                    if left_value > right_value {
-                        while let Some(curr_node) = childrens.next() {
-                            if let Err(err) = self.execute_node(ast, curr_node) {
-                                return Err(err);
-                            }
-                        }
-                    }
-                },
-                TokenTypes::GThanEq => {
-                    if left_value >= right_value {
-                        while let Some(curr_node) = childrens.next() {
-                            if let Err(err) = self.execute_node(ast, curr_node) {
-                                return Err(err);
-                            }
-                        }
-                    }
-                },
-                TokenTypes::LThan => {
-                    if left_value < right_value {
-                        while let Some(curr_node) = childrens.next() {
-                            if let Err(err) = self.execute_node(ast, curr_node) {
-                                return Err(err);
-                            }
-                        }
-                    }
-                },
-                TokenTypes::LThanEq => {
-                    if left_value <= right_value {
-                        while let Some(curr_node) = childrens.next() {
-                            if let Err(err) = self.execute_node(ast, curr_node) {
-                                return Err(err);
-                            }
-                        }
-                    }
-                },
-                _ => {}
-            }
+        let comparison_type = &comparison_node.comparison;
+        let left = &comparison_node.left;
+        let right = &comparison_node.right;
 
-            Ok(())
-        };
-
-        match comparison_node {
-            ComparisonNode { left: ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), right: ExprNodeTypes::Literal(LiteralTypes::Int(right_value)), comparison } => {
-                if let Err(err) = handle_comparison_int(left_value, right_value, comparison, &mut childrens) {
-                    return Err(err);
-                }
-            },
-            ComparisonNode { left: ExprNodeTypes::Identifier(left_name), right: ExprNodeTypes::Literal(LiteralTypes::Int(right_value)), comparison } => {
-                let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
-
-                match &left_result {
-                    Ok(left_variable) => match &left_variable.value {
-                        ExprNodeTypes::Literal(LiteralTypes::Int(left_value)) => {
-                            if let Err(err) = handle_comparison_int(left_value, right_value, comparison, &mut childrens) {
-                                return Err(err);
-                            }
-                        },
-                        ExprNodeTypes::Literal(LiteralTypes::String(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_value)),
-                        ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_value)),
-                        _ => ()
-                    },
-                    Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name))
-                }
-            },
-            ComparisonNode { left: ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), right: ExprNodeTypes::Identifier(right_name), comparison } => {
-                let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
-
-                match &right_result {
-                    Ok(right_variable) => match &right_variable.value {
-                        ExprNodeTypes::Literal(LiteralTypes::Int(right_value)) => {
-                            if let Err(err) = handle_comparison_int(left_value, right_value, comparison, &mut childrens) {
-                                return Err(err);
-                            }
-                        },
-                        ExprNodeTypes::Literal(LiteralTypes::String(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to string: \"{}\".", left_value, right_value)),
-                        ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot int: {} to compare boolean: {}.", left_value, right_value)),
-                        _ => ()
-                    },
-                    Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
-                }
-            },
-            ComparisonNode { left: ExprNodeTypes::Identifier(left_name), right: ExprNodeTypes::Identifier(right_name), comparison } => {
-                let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
-                let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
-
-                match (&left_result, &right_result) {
-                    (Ok(left_variable), Ok(right_variable)) => {
-                        match (&left_variable.value, &right_variable.value) {
-                            (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => {
-                                if let Err(err) = handle_comparison_int(left_value, right_value, comparison, &mut childrens) {
+        match comparison_type {
+            TokenTypes::EqEq => {
+                match (left, right) {
+                    (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => {
+                        if left_value == right_value {
+                            while let Some(curr_node) = childrens.next() {
+                                if let Err(err) = self.execute_node(ast, curr_node) {
                                     return Err(err);
                                 }
-                            },
-                            (ExprNodeTypes::Literal(LiteralTypes::String(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_value)),
-                            (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::String(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to string: \"{}\".", left_value, right_value)),
-                            (ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_value)),
-                            (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to boolean: {}.", left_value, right_value)),
-                            _ => ()
+                            }
                         }
                     },
-                    (Err(_), _) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name)),
-                    (_, Err(_)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
+                    (ExprNodeTypes::Identifier(left_name), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => {
+                        let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
+
+                        match &left_result {
+                            Ok(left_variable) => match &left_variable.value {
+                                ExprNodeTypes::Literal(LiteralTypes::Int(left_value)) => {
+                                    if left_value == right_value {
+                                        while let Some(curr_node) = childrens.next() {
+                                            if let Err(err) = self.execute_node(ast, curr_node) {
+                                                return Err(err);
+                                            }
+                                        }
+                                    }
+                                },
+                                ExprNodeTypes::Literal(LiteralTypes::String(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_value)),
+                                ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_value)),
+                                _ => ()
+                            },
+                            Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name))
+                        }
+                    },
+                    (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Identifier(right_name)) => {
+                        let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
+
+                        match &right_result {
+                            Ok(right_variable) => match &right_variable.value {
+                                ExprNodeTypes::Literal(LiteralTypes::Int(right_value)) => {
+                                    if left_value == right_value {
+                                        while let Some(curr_node) = childrens.next() {
+                                            if let Err(err) = self.execute_node(ast, curr_node) {
+                                                return Err(err);
+                                            }
+                                        }
+                                    }
+                                },
+                                ExprNodeTypes::Literal(LiteralTypes::String(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_name)),
+                                ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_name)),
+                                _ => ()
+                            },
+                            Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
+                        }
+                    },
+                    (ExprNodeTypes::Literal(LiteralTypes::String(left_value)), ExprNodeTypes::Literal(LiteralTypes::String(right_value))) => {
+                        if left_value == right_value {
+                            while let Some(curr_node) = childrens.next() {
+                                if let Err(err) = self.execute_node(ast, curr_node) {
+                                    return Err(err);
+                                }
+                            }
+                        }
+                    },
+                    (ExprNodeTypes::Identifier(left_name), ExprNodeTypes::Literal(LiteralTypes::String(right_value))) => {
+                        let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
+
+                        match &left_result {
+                            Ok(left_variable) => match &left_variable.value {
+                                ExprNodeTypes::Literal(LiteralTypes::String(left_value)) => {
+                                    if left_value == right_value {
+                                        while let Some(curr_node) = childrens.next() {
+                                            if let Err(err) = self.execute_node(ast, curr_node) {
+                                                return Err(err);
+                                            }
+                                        }
+                                    }
+                                },
+                                ExprNodeTypes::Literal(LiteralTypes::Int(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to string: \"{}\".", left_value, right_value)),
+                                ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to string: \"{}\".", left_value, right_value)),
+                                _ => ()
+                            },
+                            Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name))
+                        }
+                    },
+                    (ExprNodeTypes::Literal(LiteralTypes::String(left_value)), ExprNodeTypes::Identifier(right_name)) => {
+                        let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
+
+                        match &right_result {
+                            Ok(right_variable) => match &right_variable.value {
+                                ExprNodeTypes::Literal(LiteralTypes::String(right_value)) => {
+                                    if left_value == right_value {
+                                        while let Some(curr_node) = childrens.next() {
+                                            if let Err(err) = self.execute_node(ast, curr_node) {
+                                                return Err(err);
+                                            }
+                                        }
+                                    }
+                                },
+                                ExprNodeTypes::Literal(LiteralTypes::Int(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_value)),
+                                ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to boolean: {}.", left_value, right_value)),
+                                _ => ()
+                            },
+                            Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
+                        }
+                    },
+                    (ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)), ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value))) => {
+                        if left_value == right_value {
+                            while let Some(curr_node) = childrens.next() {
+                                if let Err(err) = self.execute_node(ast, curr_node) {
+                                    return Err(err);
+                                }
+                            }
+                        }
+                    },
+                    (ExprNodeTypes::Identifier(left_name), ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value))) => {
+                        let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
+
+                        match &left_result {
+                            Ok(left_variable) => match &left_variable.value {
+                                ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)) => {
+                                    if left_value == right_value {
+                                        while let Some(curr_node) = childrens.next() {
+                                            if let Err(err) = self.execute_node(ast, curr_node) {
+                                                return Err(err);
+                                            }
+                                        }
+                                    }
+                                },
+                                ExprNodeTypes::Literal(LiteralTypes::Int(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to boolean: {}.", left_value, right_value)),
+                                ExprNodeTypes::Literal(LiteralTypes::String(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to boolean: {}.", left_value, right_value)),
+                                _ => ()
+                            },
+                            Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name))
+                        }
+                    },
+                    (ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)), ExprNodeTypes::Identifier(right_name)) => {
+                        let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
+
+                        match &right_result {
+                            Ok(right_variable) => match &right_variable.value {
+                                ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value)) => {
+                                    if left_value == right_value {
+                                        while let Some(curr_node) = childrens.next() {
+                                            if let Err(err) = self.execute_node(ast, curr_node) {
+                                                return Err(err);
+                                            }
+                                        }
+                                    }
+                                },
+                                ExprNodeTypes::Literal(LiteralTypes::Int(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_value)),
+                                ExprNodeTypes::Literal(LiteralTypes::String(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to string: \"{}\".", left_value, right_value)),
+                                _ => ()
+                            },
+                            Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
+                        }
+                    },
+                    (ExprNodeTypes::Identifier(left_name), ExprNodeTypes::Identifier(right_name)) => {
+                        let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
+                        let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
+
+                        match (&left_result, &right_result) {
+                            (Ok(left_variable), Ok(right_variable)) => {
+                                match (&left_variable.value, &right_variable.value) {
+                                    (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => {
+                                        if left_value == right_value {
+                                            while let Some(curr_node) = childrens.next() {
+                                                if let Err(err) = self.execute_node(ast, curr_node) {
+                                                    return Err(err);
+                                                }
+                                            }
+                                        }
+                                    },
+                                    (ExprNodeTypes::Literal(LiteralTypes::String(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_value)),
+                                    (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::String(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to string: \"{}\".", left_value, right_value)),
+                                    (ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_value)),
+                                    (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to boolean: {}.", left_value, right_value)),
+                                    _ => ()
+                                }
+                            },
+                            (Err(_), _) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name)),
+                            (_, Err(_)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
+                        }
+                    },
+                    (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::String(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to string \"{}\".", left_value, right_value)),
+                    (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to boolean {}.", left_value, right_value)),
+                    (ExprNodeTypes::Literal(LiteralTypes::String(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int {}.", left_value, right_value)),
+                    (ExprNodeTypes::Literal(LiteralTypes::String(left_value)), ExprNodeTypes::Literal(LiteralTypes::Boolean(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to boolean {}.", left_value, right_value)),
+                    (ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int {}.", left_value, right_value)),
+                    (ExprNodeTypes::Literal(LiteralTypes::Boolean(left_value)), ExprNodeTypes::Literal(LiteralTypes::String(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to string \"{}\".", left_value, right_value))
                 }
             },
             _ => {}

@@ -1,11 +1,10 @@
-set l 5
-set r 5
-
-check "foo" == "foo" {
-  logl "5 is equals to 5"
-}
-
 logl "start program"
+
+set left 5
+set right 5
+check left == right {
+  logl "ran"
+}
 
 set int 69
 set str "hello, world"
