@@ -2,7 +2,7 @@ logl "start program"
 
 set left 5
 set right 5
-check left == right {
+check left != right {
   logl "ran"
 }
 
