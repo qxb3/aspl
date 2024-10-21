@@ -30,6 +30,7 @@ fn main() {
 
     let tokens = lexer.lex(source.as_str());
     let ast = parser.parse(tokens);
+    // println!("{:#?}", ast);
 
     let interpreter = Interpreter::new();
     match interpreter.run(ast) {

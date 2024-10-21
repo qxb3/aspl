@@ -23,8 +23,8 @@ pub struct VariableNode {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ComparisonNode {
-    pub left: LiteralTypes,
-    pub right: LiteralTypes,
+    pub left: ExprNodeTypes,
+    pub right: ExprNodeTypes,
     pub comparison: TokenTypes
 }
 
@@ -105,9 +105,6 @@ impl Parser {
     }
 
     fn parse_comparison(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, left: &Token, comparison_type: &Token, right: &Token) -> Option<Node> {
-        let left_value = left.value.as_ref().unwrap().parse::<i32>().unwrap();
-        let right_value = right.value.as_ref().unwrap().parse::<i32>().unwrap();
-
         let mut childrens: Vec<Node> = Vec::new();
 
         if tokens.peek().unwrap().r#type == TokenTypes::OpenCurly {
@@ -123,10 +120,24 @@ impl Parser {
             }
         }
 
+        let get_expr = |token: &Token| {
+            match token.r#type {
+                TokenTypes::IntLiteral => ExprNodeTypes::Literal(LiteralTypes::Int(token.value.as_ref().unwrap().parse::<i32>().unwrap())),
+                TokenTypes::StringLiteral => ExprNodeTypes::Literal(LiteralTypes::String(token.value.as_ref().unwrap().to_string())),
+                TokenTypes::Boolean => ExprNodeTypes::Literal(LiteralTypes::Boolean(token.value.as_ref().unwrap().parse::<bool>().unwrap())),
+                TokenTypes::Identifier => ExprNodeTypes::Identifier(token.value.as_ref().unwrap().to_string()),
+                _ => {
+                    println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'check'");
+                    println!("{color_yellow}Position{color_reset} -> {}:{}", token.line, token.col);
+                    exit(1);
+                }
+            }
+        };
+
         return Some(Node {
             r#type: NodeTypes::Check(ComparisonNode {
-                left: LiteralTypes::Int(left_value.to_owned()),
-                right: LiteralTypes::Int(right_value.to_owned()),
+                left: get_expr(left),
+                right: get_expr(right),
                 comparison: comparison_type.r#type
             }, childrens
         )})
@@ -134,7 +145,10 @@ impl Parser {
 
     fn parse_check(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
         if let Some(&left) = tokens.peek() {
-            if left.r#type == TokenTypes::IntLiteral {
+            if left.r#type == TokenTypes::IntLiteral ||
+                left.r#type == TokenTypes::StringLiteral ||
+                left.r#type == TokenTypes::Boolean ||
+                left.r#type == TokenTypes::Identifier {
                 tokens.next();
 
                 if let Some(&comparison_type) = tokens.peek() {
@@ -145,8 +159,11 @@ impl Parser {
                         comparison_type.r#type == TokenTypes::LThanEq {
                         tokens.next();
 
-                        if let Some(right) = tokens.clone().peek() {
-                            if right.r#type == TokenTypes::IntLiteral {
+                        if let Some(&right) = tokens.peek() {
+                            if right.r#type == TokenTypes::IntLiteral ||
+                                right.r#type == TokenTypes::StringLiteral ||
+                                right.r#type == TokenTypes::Boolean ||
+                                right.r#type == TokenTypes::Identifier {
                                 tokens.next();
 
                                 if let Some(node) = self.parse_comparison(tokens, left, comparison_type, right) {
