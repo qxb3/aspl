@@ -1,4 +1,4 @@
-check 5 > 4 {
+check 5 < 4 {
   logl "5 is greater than 4"
 }
 

@@ -1,4 +1,4 @@
-use crate::parser::{ComparisonNode, ExprNodeTypes, LiteralTypes, Node, NodeTypes, VariableNode};
+use crate::{lexer::TokenTypes, parser::{ComparisonNode, ExprNodeTypes, LiteralTypes, Node, NodeTypes, VariableNode}};
 use std::iter::Peekable;
 use inline_colorization::*;
 
@@ -45,13 +45,45 @@ impl Interpreter {
     fn handle_check(&self, ast: &Vec<Node>, comparison_node: &ComparisonNode, mut children: Peekable<std::slice::Iter<Node>>) -> Result<(), String> {
         if let LiteralTypes::Int(left_value) = comparison_node.left {
             if let LiteralTypes::Int(right_value) = comparison_node.right {
-                if left_value > right_value {
-                    while let Some(curr_node) = children.next() {
-                        if let Err(err) = self.execute_node(ast, curr_node) {
-                            return Err(err);
+                match comparison_node.comparison {
+                    TokenTypes::GThan => {
+                        if left_value > right_value {
+                            while let Some(curr_node) = children.next() {
+                                if let Err(err) = self.execute_node(ast, curr_node) {
+                                    return Err(err);
+                                }
+                            }
                         }
-                    }
-                }
+                    },
+                    TokenTypes::GThanEq => {
+                        if left_value >= right_value {
+                            while let Some(curr_node) = children.next() {
+                                if let Err(err) = self.execute_node(ast, curr_node) {
+                                    return Err(err);
+                                }
+                            }
+                        }
+                    },
+                    TokenTypes::LThan => {
+                        if left_value < right_value {
+                            while let Some(curr_node) = children.next() {
+                                if let Err(err) = self.execute_node(ast, curr_node) {
+                                    return Err(err);
+                                }
+                            }
+                        }
+                    },
+                    TokenTypes::LThanEq => {
+                        if left_value <= right_value {
+                            while let Some(curr_node) = children.next() {
+                                if let Err(err) = self.execute_node(ast, curr_node) {
+                                    return Err(err);
+                                }
+                            }
+                        }
+                    },
+                    _ => unreachable!()
+                };
             }
         }
 

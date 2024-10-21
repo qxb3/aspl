@@ -116,10 +116,10 @@ impl Lexer {
 
             match char {
                 // Check if comparison operators
-                '>' => { self.tokens.push(Token { r#type: TokenTypes::GThan, value: None, line, col }); },
-                '<' => { self.tokens.push(Token { r#type: TokenTypes::LThan, value: None, line, col }); }
                 comp if comp == '>' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::GThanEq, value: None, line, col }); },
                 comp if comp == '<' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::LThanEq, value: None, line, col }); },
+                '>' => { self.tokens.push(Token { r#type: TokenTypes::GThan, value: None, line, col }); },
+                '<' => { self.tokens.push(Token { r#type: TokenTypes::LThan, value: None, line, col }); }
 
                 '{' => { self.tokens.push(Token { r#type: TokenTypes::OpenCurly, value: None, line, col }); },
                 '}' => { self.tokens.push(Token { r#type: TokenTypes::CloseCurly, value: None, line, col }); },
