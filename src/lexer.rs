@@ -8,6 +8,7 @@ pub enum TokenTypes {
     IntLiteral,
     Boolean,
     EqEq,
+    NotEq,
     GThan,
     GThanEq,
     LThan,
@@ -118,6 +119,7 @@ impl Lexer {
             match char {
                 // Check if comparison operators
                 comp if comp == '=' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::EqEq, value: None, line, col }); },
+                comp if comp == '!' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::EqEq, value: None, line, col }); },
                 comp if comp == '>' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::GThanEq, value: None, line, col }); },
                 comp if comp == '<' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::LThanEq, value: None, line, col }); },
                 '>' => { self.tokens.push(Token { r#type: TokenTypes::GThan, value: None, line, col }); },

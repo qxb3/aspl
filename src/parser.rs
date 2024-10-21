@@ -145,7 +145,7 @@ impl Parser {
 
     fn parse_check(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
         if let Some(&left) = tokens.peek() {
-            if left.r#type == TokenTypes::IntLiteral ||
+            if  left.r#type == TokenTypes::IntLiteral ||
                 left.r#type == TokenTypes::StringLiteral ||
                 left.r#type == TokenTypes::Boolean ||
                 left.r#type == TokenTypes::Identifier {
@@ -153,6 +153,7 @@ impl Parser {
 
                 if let Some(&comparison_type) = tokens.peek() {
                     if  comparison_type.r#type == TokenTypes::EqEq ||
+                        comparison_type.r#type == TokenTypes::NotEq ||
                         comparison_type.r#type == TokenTypes::GThan ||
                         comparison_type.r#type == TokenTypes::GThanEq ||
                         comparison_type.r#type == TokenTypes::LThan ||
@@ -160,7 +161,7 @@ impl Parser {
                         tokens.next();
 
                         if let Some(&right) = tokens.peek() {
-                            if right.r#type == TokenTypes::IntLiteral ||
+                            if  right.r#type == TokenTypes::IntLiteral ||
                                 right.r#type == TokenTypes::StringLiteral ||
                                 right.r#type == TokenTypes::Boolean ||
                                 right.r#type == TokenTypes::Identifier {
