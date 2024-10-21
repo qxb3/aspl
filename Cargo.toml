@@ -3,7 +3,7 @@ name = "aspl"
 description = "A Really Shitty Programming Language"
 license = "Unlicense"
 repository = "https://github.com/qxb3/aspl"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 
 [dependencies]

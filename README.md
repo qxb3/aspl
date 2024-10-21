@@ -19,7 +19,7 @@ set a 10
 set b 20
 
 check a < b {
-  logl "a is greater than b"
+  logl "a is less than b"
 }
 ```
 
