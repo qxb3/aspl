@@ -3,6 +3,7 @@ mod parser;
 mod interpreter;
 
 use std::{env, fs, process::exit};
+use interpreter::Interpreter;
 use lexer::Lexer;
 use parser::Parser;
 
@@ -29,12 +30,12 @@ fn main() {
 
     let tokens = lexer.lex(source.as_str());
     let ast = parser.parse(tokens);
-    println!("{:#?}", ast);
 
-    // match interpreter::run(ast) {
-    //     Ok(()) => (),
-    //     Err(err) => {
-    //         println!("{err}");
-    //     }
-    // }
+    let interpreter = Interpreter::new();
+    match interpreter.run(ast) {
+        Ok(()) => (),
+        Err(err) => {
+            println!("{err}");
+        }
+    }
 }
