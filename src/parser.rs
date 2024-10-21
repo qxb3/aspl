@@ -138,7 +138,8 @@ impl Parser {
                 tokens.next();
 
                 if let Some(&comparison_type) = tokens.peek() {
-                    if comparison_type.r#type == TokenTypes::GThan ||
+                    if  comparison_type.r#type == TokenTypes::EqEq ||
+                        comparison_type.r#type == TokenTypes::GThan ||
                         comparison_type.r#type == TokenTypes::GThanEq ||
                         comparison_type.r#type == TokenTypes::LThan ||
                         comparison_type.r#type == TokenTypes::LThanEq {
