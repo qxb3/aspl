@@ -29,11 +29,12 @@ fn main() {
 
     let tokens = lexer.lex(source.as_str());
     let ast = parser.parse(tokens);
+    println!("{:#?}", ast);
 
-    match interpreter::run(ast) {
-        Ok(()) => (),
-        Err(err) => {
-            println!("{err}");
-        }
-    }
+    // match interpreter::run(ast) {
+    //     Ok(()) => (),
+    //     Err(err) => {
+    //         println!("{err}");
+    //     }
+    // }
 }

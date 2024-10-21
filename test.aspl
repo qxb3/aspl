@@ -1,3 +1,8 @@
+check 4 > 5 {
+  set foobar "foo"
+  logl foobar
+}
+
 logl "start program"
 
 set int 69

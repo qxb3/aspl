@@ -3,11 +3,16 @@ use std::{iter::Peekable, process::exit};
 use inline_colorization::*;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ExprNodeTypes {
-    Identifier(String),
+pub enum LiteralTypes {
     String(String),
     Int(i32),
     Boolean(bool)
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ExprNodeTypes {
+    Identifier(String),
+    Literal(LiteralTypes)
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -17,20 +22,27 @@ pub struct VariableNode {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ComparisonNode {
+    pub left: LiteralTypes,
+    pub right: LiteralTypes
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NodeTypes {
     Variable(VariableNode),
     Log(Vec<ExprNodeTypes>),
-    Logl(Vec<ExprNodeTypes>)
+    Logl(Vec<ExprNodeTypes>),
+    Check(ComparisonNode, Vec<Node>)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
     pub r#type: NodeTypes
 }
 
 #[derive(Debug, Clone)]
 pub struct Parser {
-    nodes: Vec<Node>
+    nodes: Vec<Node>,
 }
 
 impl Parser {
@@ -38,7 +50,7 @@ impl Parser {
         Self { nodes: Vec::new() }
     }
 
-    fn parse_variable(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) {
+    fn parse_variable(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
         let identifier = match tokens.peek() {
             Some(curr_token) if curr_token.r#type == TokenTypes::Identifier => { curr_token.value.as_ref().unwrap() },
             curr_token => {
@@ -52,9 +64,9 @@ impl Parser {
 
         let variable = match tokens.peek() {
             Some(curr_token) => match curr_token.r#type {
-                TokenTypes::StringLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::String(curr_token.value.clone().unwrap()) },
-                TokenTypes::IntLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::Int(curr_token.value.clone().unwrap().parse::<i32>().unwrap()) },
-                TokenTypes::Boolean => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::Boolean(curr_token.value.clone().unwrap().parse::<bool>().unwrap()) },
+                TokenTypes::StringLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::String(curr_token.value.clone().unwrap())) },
+                TokenTypes::IntLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::Int(curr_token.value.clone().unwrap().parse::<i32>().unwrap())) },
+                TokenTypes::Boolean => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::Boolean(curr_token.value.clone().unwrap().parse::<bool>().unwrap())) },
                 _ => {
                     println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Unknown Identifier '{}'", curr_token.value.as_ref().unwrap());
                     println!("{color_yellow}Position{color_reset} -> {}:{}", curr_token.line, curr_token.col);
@@ -68,26 +80,88 @@ impl Parser {
             }
         };
 
-        self.nodes.push(Node { r#type: NodeTypes::Variable(variable) });
+        Some(Node { r#type: NodeTypes::Variable(variable) })
     }
 
-    fn parse_log(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, command: &String) {
+    fn parse_log(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, command: &String) -> Option<Node> {
         let mut args: Vec<ExprNodeTypes> = Vec::new();
 
         while let Some(curr_token) = tokens.peek() {
             match curr_token.r#type {
                 TokenTypes::Identifier => { args.push(ExprNodeTypes::Identifier(tokens.next().unwrap().value.clone().unwrap())); },
-                TokenTypes::StringLiteral => { args.push(ExprNodeTypes::String(tokens.next().unwrap().value.clone().unwrap())); },
-                TokenTypes::IntLiteral => { args.push(ExprNodeTypes::Int(tokens.next().unwrap().value.clone().unwrap().parse::<i32>().unwrap())); },
-                TokenTypes::Boolean => { args.push(ExprNodeTypes::Boolean(tokens.next().unwrap().value.clone().unwrap().parse::<bool>().unwrap())); },
+                TokenTypes::StringLiteral => { args.push(ExprNodeTypes::Literal(LiteralTypes::String(tokens.next().unwrap().value.clone().unwrap()))); },
+                TokenTypes::IntLiteral => { args.push(ExprNodeTypes::Literal(LiteralTypes::Int(tokens.next().unwrap().value.clone().unwrap().parse::<i32>().unwrap()))); },
+                TokenTypes::Boolean => { args.push(ExprNodeTypes::Literal(LiteralTypes::Boolean(tokens.next().unwrap().value.clone().unwrap().parse::<bool>().unwrap()))); },
                 _ => break
             }
         }
 
         match command.as_str() {
-            "log" => { self.nodes.push(Node { r#type: NodeTypes::Log(args) }); },
-            "logl" => { self.nodes.push(Node { r#type: NodeTypes::Logl(args) }); },
-            _ => unreachable!()
+            "log" => Some( Node { r#type: NodeTypes::Log(args) } ),
+            "logl" => Some( Node { r#type: NodeTypes::Logl(args) } ),
+            _ => None
+        }
+    }
+
+    fn parse_check(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
+        if let Some(&left) = tokens.peek() {
+            if left.r#type == TokenTypes::IntLiteral {
+                tokens.next();
+
+                if let Some(op) = tokens.peek() {
+                    if op.r#type == TokenTypes::GThan {
+                        tokens.next();
+
+                        if let Some(right) = tokens.clone().peek() {
+                            if right.r#type == TokenTypes::IntLiteral {
+                                tokens.next();
+
+                                let left_value = left.value.as_ref().unwrap().parse::<i32>().unwrap();
+                                let right_value = right.value.as_ref().unwrap().parse::<i32>().unwrap();
+
+                                let mut childrens: Vec<Node> = Vec::new();
+
+                                if tokens.peek().unwrap().r#type == TokenTypes::OpenCurly {
+                                    tokens.next();
+
+                                    while let Some(curr_token) = tokens.clone().peek() {
+                                        if curr_token.r#type == TokenTypes::CloseCurly { break; }
+
+                                        tokens.next();
+                                        if let Some(parsed_token) = self.parse_token(tokens, curr_token) {
+                                            childrens.push(parsed_token);
+                                        }
+                                    }
+                                }
+
+                                return Some(Node {
+                                    r#type: NodeTypes::Check(ComparisonNode {
+                                        left: LiteralTypes::Int(left_value.to_owned()),
+                                        right: LiteralTypes::Int(right_value.to_owned())
+                                    },
+                                    childrens
+                                )})
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn parse_token(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, token: &Token) -> Option<Node> {
+        match token {
+            Token { r#type: TokenTypes::Command, value: Some(command), .. } => {
+                match command.as_str() {
+                    "set"           => Some(self.parse_variable(tokens)).unwrap(),
+                    "log" | "logl"  => Some(self.parse_log(tokens, command)).unwrap(),
+                    "check"         => Some(self.parse_check(tokens)).unwrap(),
+                    _ => None
+                }
+            },
+            _ => None
         }
     }
 
@@ -95,12 +169,8 @@ impl Parser {
         let mut tokens = source_tokens.iter().peekable();
 
         while let Some(token) = tokens.next() {
-            match token {
-                Token { r#type: TokenTypes::Command, value: Some(command), .. } => {
-                    if command == "set" { self.parse_variable(&mut tokens); }
-                    if command == "log" || command == "logl" { self.parse_log(&mut tokens, command); }
-                },
-                _ => ()
+            if let Some(node) = self.parse_token(&mut tokens, token) {
+                self.nodes.push(node);
             }
         }
 

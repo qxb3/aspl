@@ -6,7 +6,13 @@ pub enum TokenTypes {
     Command,
     StringLiteral,
     IntLiteral,
-    Boolean
+    Boolean,
+    GThan,
+    GThanEq,
+    LThan,
+    LThanEq,
+    OpenCurly,
+    CloseCurly
 }
 
 #[derive(Debug, Clone)]
@@ -78,9 +84,9 @@ impl Lexer {
         *col += buffer.len();
 
         match buffer.as_str() {
-            "log" | "logl" | "set"      => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            "true" | "false"            => { self.tokens.push(Token { r#type: TokenTypes::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            _                           => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
+            "log" | "logl" | "set" | "check"    => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            "true" | "false"                    => { self.tokens.push(Token { r#type: TokenTypes::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            _                                   => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
         }
     }
 
@@ -106,6 +112,19 @@ impl Lexer {
             if char.is_alphanumeric() && !char.is_numeric() {
                 self.lex_command(char, &mut chars, &mut line, &mut col);
                 continue;
+            }
+
+            match char {
+                // Check if comparison operators
+                '>' => { self.tokens.push(Token { r#type: TokenTypes::GThan, value: None, line, col }); },
+                '<' => { self.tokens.push(Token { r#type: TokenTypes::LThan, value: None, line, col }); }
+                comp if comp == '>' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::GThanEq, value: None, line, col }); },
+                comp if comp == '<' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::LThanEq, value: None, line, col }); },
+
+                '{' => { self.tokens.push(Token { r#type: TokenTypes::OpenCurly, value: None, line, col }); },
+                '}' => { self.tokens.push(Token { r#type: TokenTypes::CloseCurly, value: None, line, col }); },
+
+                _ => ()
             }
 
             if char == '\n' {
