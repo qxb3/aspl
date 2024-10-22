@@ -22,10 +22,10 @@ pub struct VariableNode {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ComparisonNode {
+pub struct ConditionalNode {
     pub left: ExprNodeTypes,
     pub right: ExprNodeTypes,
-    pub comparison: TokenTypes
+    pub condition_type: TokenTypes
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -33,7 +33,7 @@ pub enum NodeTypes {
     Variable(VariableNode),
     Log(Vec<ExprNodeTypes>),
     Logl(Vec<ExprNodeTypes>),
-    Check(ComparisonNode, Vec<Node>)
+    Check(ConditionalNode, Vec<Node>)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,7 +104,7 @@ impl Parser {
         }
     }
 
-    fn parse_comparison(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, left: &Token, comparison_type: &Token, right: &Token) -> Option<Node> {
+    fn parse_conditional(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, left: &Token, conditional_type: &Token, right: &Token) -> Option<Node> {
         let mut childrens: Vec<Node> = Vec::new();
 
         if tokens.peek().unwrap().r#type == TokenTypes::OpenCurly {
@@ -135,10 +135,10 @@ impl Parser {
         };
 
         return Some(Node {
-            r#type: NodeTypes::Check(ComparisonNode {
+            r#type: NodeTypes::Check(ConditionalNode {
                 left: get_expr(left),
                 right: get_expr(right),
-                comparison: comparison_type.r#type
+                condition_type: conditional_type.r#type
             }, childrens
         )})
     }
@@ -151,13 +151,13 @@ impl Parser {
                 left.r#type == TokenTypes::Identifier {
                 tokens.next();
 
-                if let Some(&comparison_type) = tokens.peek() {
-                    if  comparison_type.r#type == TokenTypes::EqEq ||
-                        comparison_type.r#type == TokenTypes::NotEq ||
-                        comparison_type.r#type == TokenTypes::GThan ||
-                        comparison_type.r#type == TokenTypes::GThanEq ||
-                        comparison_type.r#type == TokenTypes::LThan ||
-                        comparison_type.r#type == TokenTypes::LThanEq {
+                if let Some(&conditional_type) = tokens.peek() {
+                    if  conditional_type.r#type == TokenTypes::EqEq ||
+                        conditional_type.r#type == TokenTypes::NotEq ||
+                        conditional_type.r#type == TokenTypes::GThan ||
+                        conditional_type.r#type == TokenTypes::GThanEq ||
+                        conditional_type.r#type == TokenTypes::LThan ||
+                        conditional_type.r#type == TokenTypes::LThanEq {
                         tokens.next();
 
                         if let Some(&right) = tokens.peek() {
@@ -167,7 +167,7 @@ impl Parser {
                                 right.r#type == TokenTypes::Identifier {
                                 tokens.next();
 
-                                if let Some(node) = self.parse_comparison(tokens, left, comparison_type, right) {
+                                if let Some(node) = self.parse_conditional(tokens, left, conditional_type, right) {
                                     return Some(node);
                                 }
                             }

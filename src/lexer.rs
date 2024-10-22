@@ -117,7 +117,7 @@ impl Lexer {
             }
 
             match char {
-                // Check if comparison operators
+                // Check if conditional operators
                 comp if comp == '=' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::EqEq, value: None, line, col }); },
                 comp if comp == '!' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::NotEq, value: None, line, col }); },
                 comp if comp == '>' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::GThanEq, value: None, line, col }); },
