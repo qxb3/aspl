@@ -2,9 +2,13 @@ logl "start program"
 
 set left 5
 set right 5
-logl left == right
 check left == right {
   logl "5 is equals to 5"
+}
+
+while true == true {
+  logl "eeyyy 1"
+  logl "eeyyy 2"
 }
 
 set int 69

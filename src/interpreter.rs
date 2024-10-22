@@ -73,6 +73,27 @@ impl Interpreter {
         Ok(())
     }
 
+    fn handle_while(&self, ast: &Vec<Node>, conditional_node: &ExprConditional, childrens: &Vec<Node>) -> Result<(), String> {
+        loop {
+            let mut childrens = childrens.iter().peekable();
+
+            match self.handle_conditional(ast, &conditional_node.left, &conditional_node.condition_type, &conditional_node.right) {
+                Ok(result) => {
+                    if !result { break; }
+
+                    while let Some(curr_node) = childrens.next() {
+                        if let Err(err) = self.execute_node(ast, curr_node) {
+                            return Err(err);
+                        }
+                    }
+                },
+                Err(err) => return Err(err)
+            }
+        }
+
+        Ok(())
+    }
+
     fn handle_conditional(&self, ast: &Vec<Node>, left: &ExprNodeTypes, conditional_type: &TokenTypes, right: &ExprNodeTypes) -> Result<bool, String> {
         match (left, right) {
             (ExprNodeTypes::Literal(LiteralTypes::Int(left_value)), ExprNodeTypes::Literal(LiteralTypes::Int(right_value))) => {
@@ -218,6 +239,11 @@ impl Interpreter {
             },
             NodeTypes::Check(conditional_node, children) => {
                 if let Err(err) = self.handle_check(ast, conditional_node, children.iter().peekable()) {
+                    return Err(err);
+                }
+            },
+            NodeTypes::While(conditional_node, children) => {
+                if let Err(err) = self.handle_while(ast, conditional_node, children) {
                     return Err(err);
                 }
             },

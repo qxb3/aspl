@@ -33,7 +33,8 @@ pub enum NodeTypes {
     Variable(NodeVariable),
     Log(Vec<ExprNodeTypes>),
     Logl(Vec<ExprNodeTypes>),
-    Check(ExprConditional, Vec<Node>)
+    Check(ExprConditional, Vec<Node>),
+    While(ExprConditional, Vec<Node>)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,6 +134,36 @@ impl Parser {
         })
     }
 
+    fn parse_while(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
+        println!("ran");
+        let mut childrens: Vec<Node> = Vec::new();
+
+        let condition = match self.get_conditional(tokens) {
+            Some(cond) => cond,
+            None => {
+                println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'while'");
+                exit(1);
+            }
+        };
+
+        if tokens.peek().unwrap().r#type == TokenTypes::OpenCurly {
+            tokens.next();
+
+            while let Some(curr_token) = tokens.clone().peek() {
+                if curr_token.r#type == TokenTypes::CloseCurly { break; }
+
+                tokens.next();
+                if let Some(parsed_token) = self.parse_token(tokens, curr_token) {
+                    childrens.push(parsed_token);
+                }
+            }
+        }
+
+        Some(Node {
+            r#type: NodeTypes::While(condition, childrens)
+        })
+    }
+
     fn parse_token(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, token: &Token) -> Option<Node> {
         match token {
             Token { r#type: TokenTypes::Command, value: Some(command), .. } => {
@@ -140,6 +171,7 @@ impl Parser {
                     "set"           => Some(self.parse_variable(tokens)).unwrap(),
                     "log" | "logl"  => Some(self.parse_log(tokens, command)).unwrap(),
                     "check"         => Some(self.parse_check(tokens)).unwrap(),
+                    "while"         => Some(self.parse_while(tokens)).unwrap(),
                     _ => None
                 }
             },

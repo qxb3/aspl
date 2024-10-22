@@ -86,9 +86,11 @@ impl Lexer {
         *col += buffer.len();
 
         match buffer.as_str() {
-            "log" | "logl" | "set" | "check"    => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            "true" | "false"                    => { self.tokens.push(Token { r#type: TokenTypes::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            _                                   => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
+            "log" | "logl"  |
+            "set" | "check" |
+            "while"             => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            "true" | "false"    => { self.tokens.push(Token { r#type: TokenTypes::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            _                   => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
         }
     }
 
