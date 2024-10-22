@@ -10,30 +10,30 @@ pub enum LiteralTypes {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ExprConditional {
+    pub left: Box<ExprNodeTypes>,
+    pub right: Box<ExprNodeTypes>,
+    pub condition_type: TokenTypes
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ExprNodeTypes {
     Identifier(String),
     Literal(LiteralTypes)
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct VariableNode {
+pub struct NodeVariable {
     pub name: String,
     pub value: ExprNodeTypes
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ConditionalNode {
-    pub left: ExprNodeTypes,
-    pub right: ExprNodeTypes,
-    pub condition_type: TokenTypes
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NodeTypes {
-    Variable(VariableNode),
+    Variable(NodeVariable),
     Log(Vec<ExprNodeTypes>),
     Logl(Vec<ExprNodeTypes>),
-    Check(ConditionalNode, Vec<Node>)
+    Check(ExprConditional, Vec<Node>)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,9 +65,9 @@ impl Parser {
 
         let variable = match tokens.peek() {
             Some(curr_token) => match curr_token.r#type {
-                TokenTypes::StringLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::String(curr_token.value.clone().unwrap())) },
-                TokenTypes::IntLiteral => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::Int(curr_token.value.clone().unwrap().parse::<i32>().unwrap())) },
-                TokenTypes::Boolean => VariableNode { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::Boolean(curr_token.value.clone().unwrap().parse::<bool>().unwrap())) },
+                TokenTypes::StringLiteral => NodeVariable { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::String(curr_token.value.clone().unwrap())) },
+                TokenTypes::IntLiteral => NodeVariable { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::Int(curr_token.value.clone().unwrap().parse::<i32>().unwrap())) },
+                TokenTypes::Boolean => NodeVariable { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::Boolean(curr_token.value.clone().unwrap().parse::<bool>().unwrap())) },
                 _ => {
                     println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Unknown Identifier '{}'", curr_token.value.as_ref().unwrap());
                     println!("{color_yellow}Position{color_reset} -> {}:{}", curr_token.line, curr_token.col);
@@ -87,7 +87,7 @@ impl Parser {
     fn parse_log(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, command: &String) -> Option<Node> {
         let mut args: Vec<ExprNodeTypes> = Vec::new();
 
-        while let Some(curr_token) = tokens.peek() {
+        while let Some(&curr_token) = tokens.peek() {
             match curr_token.r#type {
                 TokenTypes::Identifier => { args.push(ExprNodeTypes::Identifier(tokens.next().unwrap().value.clone().unwrap())); },
                 TokenTypes::StringLiteral => { args.push(ExprNodeTypes::Literal(LiteralTypes::String(tokens.next().unwrap().value.clone().unwrap()))); },
@@ -104,8 +104,16 @@ impl Parser {
         }
     }
 
-    fn parse_conditional(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, left: &Token, conditional_type: &Token, right: &Token) -> Option<Node> {
+    fn parse_check(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
         let mut childrens: Vec<Node> = Vec::new();
+
+        let condition = match self.get_conditional(tokens) {
+            Some(cond) => cond,
+            None => {
+                println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'check'");
+                exit(1);
+            }
+        };
 
         if tokens.peek().unwrap().r#type == TokenTypes::OpenCurly {
             tokens.next();
@@ -120,64 +128,9 @@ impl Parser {
             }
         }
 
-        let get_expr = |token: &Token| {
-            match token.r#type {
-                TokenTypes::IntLiteral => ExprNodeTypes::Literal(LiteralTypes::Int(token.value.as_ref().unwrap().parse::<i32>().unwrap())),
-                TokenTypes::StringLiteral => ExprNodeTypes::Literal(LiteralTypes::String(token.value.as_ref().unwrap().to_string())),
-                TokenTypes::Boolean => ExprNodeTypes::Literal(LiteralTypes::Boolean(token.value.as_ref().unwrap().parse::<bool>().unwrap())),
-                TokenTypes::Identifier => ExprNodeTypes::Identifier(token.value.as_ref().unwrap().to_string()),
-                _ => {
-                    println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'check'");
-                    println!("{color_yellow}Position{color_reset} -> {}:{}", token.line, token.col);
-                    exit(1);
-                }
-            }
-        };
-
-        return Some(Node {
-            r#type: NodeTypes::Check(ConditionalNode {
-                left: get_expr(left),
-                right: get_expr(right),
-                condition_type: conditional_type.r#type
-            }, childrens
-        )})
-    }
-
-    fn parse_check(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
-        if let Some(&left) = tokens.peek() {
-            if  left.r#type == TokenTypes::IntLiteral ||
-                left.r#type == TokenTypes::StringLiteral ||
-                left.r#type == TokenTypes::Boolean ||
-                left.r#type == TokenTypes::Identifier {
-                tokens.next();
-
-                if let Some(&conditional_type) = tokens.peek() {
-                    if  conditional_type.r#type == TokenTypes::EqEq ||
-                        conditional_type.r#type == TokenTypes::NotEq ||
-                        conditional_type.r#type == TokenTypes::GThan ||
-                        conditional_type.r#type == TokenTypes::GThanEq ||
-                        conditional_type.r#type == TokenTypes::LThan ||
-                        conditional_type.r#type == TokenTypes::LThanEq {
-                        tokens.next();
-
-                        if let Some(&right) = tokens.peek() {
-                            if  right.r#type == TokenTypes::IntLiteral ||
-                                right.r#type == TokenTypes::StringLiteral ||
-                                right.r#type == TokenTypes::Boolean ||
-                                right.r#type == TokenTypes::Identifier {
-                                tokens.next();
-
-                                if let Some(node) = self.parse_conditional(tokens, left, conditional_type, right) {
-                                    return Some(node);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        None
+        Some(Node {
+            r#type: NodeTypes::Check(condition, childrens)
+        })
     }
 
     fn parse_token(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, token: &Token) -> Option<Node> {
@@ -204,5 +157,58 @@ impl Parser {
         }
 
         self.nodes.clone()
+    }
+
+    fn get_conditional(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<ExprConditional> {
+        let get_expr = |token: &Token| {
+            match token.r#type {
+                TokenTypes::IntLiteral => ExprNodeTypes::Literal(LiteralTypes::Int(token.value.as_ref().unwrap().parse::<i32>().unwrap())),
+                TokenTypes::StringLiteral => ExprNodeTypes::Literal(LiteralTypes::String(token.value.as_ref().unwrap().to_string())),
+                TokenTypes::Boolean => ExprNodeTypes::Literal(LiteralTypes::Boolean(token.value.as_ref().unwrap().parse::<bool>().unwrap())),
+                TokenTypes::Identifier => ExprNodeTypes::Identifier(token.value.as_ref().unwrap().to_string()),
+                _ => {
+                    println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'check'");
+                    println!("{color_yellow}Position{color_reset} -> {}:{}", token.line, token.col);
+                    exit(1);
+                }
+            }
+        };
+
+        if let Some(&left) = tokens.peek() {
+            if  left.r#type == TokenTypes::IntLiteral ||
+                left.r#type == TokenTypes::StringLiteral ||
+                left.r#type == TokenTypes::Boolean ||
+                left.r#type == TokenTypes::Identifier {
+                tokens.next();
+
+                if let Some(&conditional_type) = tokens.peek() {
+                    if  conditional_type.r#type == TokenTypes::EqEq ||
+                        conditional_type.r#type == TokenTypes::NotEq ||
+                        conditional_type.r#type == TokenTypes::GThan ||
+                        conditional_type.r#type == TokenTypes::GThanEq ||
+                        conditional_type.r#type == TokenTypes::LThan ||
+                        conditional_type.r#type == TokenTypes::LThanEq {
+                        tokens.next();
+
+                        if let Some(&right) = tokens.peek() {
+                            if  right.r#type == TokenTypes::IntLiteral ||
+                                right.r#type == TokenTypes::StringLiteral ||
+                                right.r#type == TokenTypes::Boolean ||
+                                right.r#type == TokenTypes::Identifier {
+                                tokens.next();
+
+                                return Some(ExprConditional {
+                                    left: Box::new(get_expr(left)),
+                                    right: Box::new(get_expr(right)),
+                                    condition_type: conditional_type.r#type
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 }

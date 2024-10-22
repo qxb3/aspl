@@ -1,4 +1,4 @@
-use crate::{lexer::TokenTypes, parser::{ConditionalNode, ExprNodeTypes, LiteralTypes, Node, NodeTypes, VariableNode}};
+use crate::{lexer::TokenTypes, parser::{ExprConditional, ExprNodeTypes, LiteralTypes, Node, NodeTypes, NodeVariable}};
 use std::iter::Peekable;
 use inline_colorization::*;
 
@@ -56,7 +56,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn handle_check(&self, ast: &Vec<Node>, conditional_node: &ConditionalNode, mut childrens: Peekable<std::slice::Iter<Node>>) -> Result<(), String> {
+    fn handle_check(&self, ast: &Vec<Node>, conditional_node: &ExprConditional, mut childrens: Peekable<std::slice::Iter<Node>>) -> Result<(), String> {
         match self.handle_conditional(ast, &conditional_node.left, &conditional_node.condition_type, &conditional_node.right) {
             Ok(result) => {
                 if result {
@@ -246,7 +246,7 @@ impl Interpreter {
         f(a, b)
     }
 
-    fn find_variable(&self, mut nodes: Peekable<std::slice::Iter<Node>>, name: String) -> Result<VariableNode, ()> {
+    fn find_variable(&self, mut nodes: Peekable<std::slice::Iter<Node>>, name: String) -> Result<NodeVariable, ()> {
         while let Some(node) = nodes.next() {
             match &node.r#type {
                 NodeTypes::Variable(variable) => {

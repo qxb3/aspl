@@ -2,8 +2,9 @@ logl "start program"
 
 set left 5
 set right 5
-check left != right {
-  logl "ran"
+logl left == right
+check left == right {
+  logl "5 is equals to 5"
 }
 
 set int 69
