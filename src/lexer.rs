@@ -77,7 +77,9 @@ impl Lexer {
         chars.next();
         *col += 1;
 
-        self.tokens.push(Token { r#type: TokenTypes::StringLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
+        self.tokens.push(Token { r#type: TokenTypes::StringLiteral, value: Some(buffer.to_owned()), line: line.to_owned(), col: col.to_owned() });
+
+        *col += buffer.len() + 1;
     }
 
     fn lex_int_lit(&mut self, char: char, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
@@ -88,13 +90,13 @@ impl Lexer {
         while let Some(curr_char) = chars.peek() {
             if curr_char.is_numeric() {
                 buffer.push(chars.next().unwrap());
-                *col += 1;
             } else {
                 break;
             }
         }
 
-        self.tokens.push(Token { r#type: TokenTypes::IntLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
+        self.tokens.push(Token { r#type: TokenTypes::IntLiteral, value: Some(buffer.to_owned()), line: line.to_owned(), col: col.to_owned() });
+        *col += buffer.len();
     }
 
     fn lex_command(&mut self, char: char, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
@@ -110,15 +112,15 @@ impl Lexer {
             }
         }
 
-        *col += buffer.len();
-
         match buffer.as_str() {
             "log" | "logl"  |
             "set" | "check" |
-            "while"             => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            "true" | "false"    => { self.tokens.push(Token { r#type: TokenTypes::BooleanLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            _                   => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
+            "while"             => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer.to_owned()), line: line.to_owned(), col: col.to_owned() }); },
+            "true" | "false"    => { self.tokens.push(Token { r#type: TokenTypes::BooleanLiteral, value: Some(buffer.to_owned()), line: line.to_owned(), col: col.to_owned() }); },
+            _                   => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer.to_owned()), line: line.to_owned(), col: col.to_owned() }); }
         }
+
+        *col += buffer.len();
     }
 
     pub fn lex(&mut self, source: &str) -> Vec<Token> {
@@ -161,6 +163,10 @@ impl Lexer {
                 '}' => { self.tokens.push(Token { r#type: TokenTypes::CloseCurly, value: None, line, col }); },
 
                 _ => ()
+            }
+
+            if char.is_whitespace() {
+                col += 1;
             }
 
             if char == '\n' {

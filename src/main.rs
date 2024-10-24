@@ -27,10 +27,15 @@ fn main() {
     };
 
     let tokens = Lexer::new().lex(source.as_str());
-    match Parser::new(tokens.iter().cloned().into_iter()).parse() {
-        Ok(ast) => println!("{:#?}", ast),
-        Err(err) => println!("{color_red}[ERROR]{color_reset} -> {err}.")
-    }
+    let ast = match Parser::new(tokens.iter().cloned().into_iter()).parse() {
+        Ok(ast) => ast,
+        Err(err) => {
+            println!("{color_red}[ERROR]{color_reset} -> {err}.");
+            exit(1);
+        }
+    };
+
+    println!("{:#?}", ast);
 
     // let interpreter = Interpreter::new();
     // match interpreter.run(ast) {
