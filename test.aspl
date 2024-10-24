@@ -1,10 +1,10 @@
 set foo 1
 logl 123 "hello" true false 1 foo
 
-check true == true {
+check true {
   logl "check"
 }
 
-while "hi" == "hello" {
+while "foo" {
   logl "while"
 }

@@ -108,25 +108,53 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
     fn parse_check_command(&mut self) -> Result<Node, String> {
         self.advance();
 
-        let condition = self.parse_condition()?;
-        let scope = self.parse_scope()?;
+        if let Some(token) = &self.current_token {
+            if token.r#type.is_literal() {
+                let literal = self.parse_literal()?;
+                let scope = self.parse_scope()?;
 
-        Ok(Node::Check {
-            condition: Box::new(condition),
-            scope: Box::new(scope)
-        })
+                return Ok(Node::Check {
+                    condition: Box::new(literal),
+                    scope: Box::new(scope)
+                });
+            } else {
+                let condition = self.parse_condition()?;
+                let scope = self.parse_scope()?;
+
+                return Ok(Node::Check {
+                    condition: Box::new(condition),
+                    scope: Box::new(scope)
+                })
+            }
+        }
+
+        Err(format!("Unexpected end of input while parsing check command"))
     }
 
     fn parse_while_command(&mut self) -> Result<Node, String> {
         self.advance();
 
-        let condition = self.parse_condition()?;
-        let scope = self.parse_scope()?;
+        if let Some(token) = &self.current_token {
+            if token.r#type.is_literal() {
+                let literal = self.parse_literal()?;
+                let scope = self.parse_scope()?;
 
-        Ok(Node::While {
-            condition: Box::new(condition),
-            scope: Box::new(scope)
-        })
+                return Ok(Node::While {
+                    condition: Box::new(literal),
+                    scope: Box::new(scope)
+                });
+            } else {
+                let condition = self.parse_condition()?;
+                let scope = self.parse_scope()?;
+
+                return Ok(Node::While {
+                    condition: Box::new(condition),
+                    scope: Box::new(scope)
+                })
+            }
+        }
+
+        Err(format!("Unexpected end of input while parsing while command"))
     }
 
     fn parse_command(&mut self) -> Result<Node, String> {
@@ -165,7 +193,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             return Ok(Node::Literal(value.unwrap()))
         }
 
-        return Err(format!("Unexpected end of input while parsing literal"));
+        Err(format!("Unexpected end of input while parsing literal"))
     }
 
     fn parse_identifier(&mut self) -> Result<Node, String> {
@@ -179,7 +207,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             return Ok(Node::Identifier(token.value.clone().unwrap()));
         }
 
-        return Err(format!("Unexpected end of input while parsing identifier"))
+        Err(format!("Unexpected end of input while parsing identifier"))
     }
 
     fn parse_condition(&mut self) -> Result<Node, String> {
@@ -195,6 +223,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             token_type => return Err(format!("Expected a condition, but found {:?}", token_type))
         };
 
+        // Advance from condition
         self.advance();
 
         let right = self.parse_literal()?;

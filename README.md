@@ -24,6 +24,13 @@ check a < b {
 }
 ```
 
+### While loop
+```bash
+while true {
+  logl "loop"
+}
+```
+
 ## Using
 
 ### Installation
