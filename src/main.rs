@@ -1,9 +1,10 @@
 mod lexer;
 mod parser;
-mod interpreter;
+// mod interpreter;
 
 use std::{env, fs, process::exit};
-use interpreter::Interpreter;
+use inline_colorization::*;
+// use interpreter::Interpreter;
 use lexer::Lexer;
 use parser::Parser;
 
@@ -25,18 +26,17 @@ fn main() {
         }
     };
 
-    let mut lexer = Lexer::new();
-    let mut parser = Parser::new();
-
-    let tokens = lexer.lex(source.as_str());
-    let ast = parser.parse(tokens);
-    // print!("{:#?}", ast);
-
-    let interpreter = Interpreter::new();
-    match interpreter.run(ast) {
-        Ok(()) => (),
-        Err(err) => {
-            println!("{err}");
-        }
+    let tokens = Lexer::new().lex(source.as_str());
+    match Parser::new(tokens.iter().cloned().into_iter()).parse() {
+        Ok(ast) => println!("{:#?}", ast),
+        Err(err) => println!("{color_red}[ERROR]{color_reset} -> {err}.")
     }
+
+    // let interpreter = Interpreter::new();
+    // match interpreter.run(ast) {
+    //     Ok(()) => (),
+    //     Err(err) => {
+    //         println!("{err}");
+    //     }
+    // }
 }

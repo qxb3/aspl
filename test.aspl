@@ -1,24 +1,10 @@
-logl "start program"
+set foo 1
+logl 123 "hello" true false 1 foo
 
-set left 5
-set right 5
-check left == right {
-  logl "5 is equals to 5"
+check true == true {
+  logl "check"
 }
 
-while true == true {
-  logl "eeyyy 1"
-  logl "eeyyy 2"
+while "hi" == "hello" {
+  logl "while"
 }
-
-set int 69
-set str "hello, world"
-set bool true
-
-logl "variables:"
-logl "int: " int
-logl "str: " str
-logl "bool: " bool
-
-log "hello "
-log "world"

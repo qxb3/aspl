@@ -6,15 +6,41 @@ pub enum TokenTypes {
     Command,
     StringLiteral,
     IntLiteral,
-    Boolean,
+    BooleanLiteral,
     EqEq,
     NotEq,
     GThan,
     GThanEq,
     LThan,
     LThanEq,
+    AND,
+    OR,
     OpenCurly,
     CloseCurly
+}
+
+impl TokenTypes {
+    pub fn is_command(&self) -> bool { matches!(self, TokenTypes::Command) }
+    pub fn is_identifier(&self) -> bool { matches!(self, TokenTypes::Identifier) }
+    pub fn is_open_curly(&self) -> bool { matches!(self, TokenTypes::OpenCurly) }
+    pub fn is_close_curly(&self) -> bool { matches!(self, TokenTypes::CloseCurly) }
+
+    pub fn is_literal(&self) -> bool{
+        return matches!(self,
+            TokenTypes::IntLiteral |
+            TokenTypes::StringLiteral |
+            TokenTypes::BooleanLiteral);
+    }
+
+    pub fn is_condition_op(&self) -> bool {
+        return matches!(self,
+            TokenTypes::EqEq |
+            TokenTypes::NotEq |
+            TokenTypes::GThan |
+            TokenTypes::GThanEq |
+            TokenTypes::LThan |
+            TokenTypes::LThanEq);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -25,6 +51,7 @@ pub struct Token {
     pub line: usize
 }
 
+#[derive(Debug)]
 pub struct Lexer {
     tokens: Vec<Token>
 }
@@ -89,7 +116,7 @@ impl Lexer {
             "log" | "logl"  |
             "set" | "check" |
             "while"             => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            "true" | "false"    => { self.tokens.push(Token { r#type: TokenTypes::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
+            "true" | "false"    => { self.tokens.push(Token { r#type: TokenTypes::BooleanLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
             _                   => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
         }
     }
@@ -126,6 +153,9 @@ impl Lexer {
                 comp if comp == '<' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::LThanEq, value: None, line, col }); },
                 '>' => { self.tokens.push(Token { r#type: TokenTypes::GThan, value: None, line, col }); },
                 '<' => { self.tokens.push(Token { r#type: TokenTypes::LThan, value: None, line, col }); }
+
+                comp if comp == '&' && chars.peek().unwrap() == &'&' => { self.tokens.push(Token { r#type: TokenTypes::AND, value: None, line, col }); }
+                comp if comp == '|' && chars.peek().unwrap() == &'|' => { self.tokens.push(Token { r#type: TokenTypes::OR, value: None, line, col }); }
 
                 '{' => { self.tokens.push(Token { r#type: TokenTypes::OpenCurly, value: None, line, col }); },
                 '}' => { self.tokens.push(Token { r#type: TokenTypes::CloseCurly, value: None, line, col }); },

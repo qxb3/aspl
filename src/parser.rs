@@ -1,246 +1,290 @@
 use crate::lexer::{Token, TokenTypes};
-use std::{iter::Peekable, process::exit};
-use inline_colorization::*;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum LiteralTypes {
+pub enum Literals {
     String(String),
     Int(i32),
     Boolean(bool)
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ExprConditional {
-    pub left: Box<ExprNodeTypes>,
-    pub right: Box<ExprNodeTypes>,
-    pub condition_type: TokenTypes
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ExprNodeTypes {
+pub enum Node {
+    Literal(Literals),
     Identifier(String),
-    Literal(LiteralTypes)
-}
+    Var {
+        identifier: Box<Node>,
+        value: Literals
+    },
+    Condition {
+        left: Box<Node>,
+        condition: String,
+        right: Box<Node>
+    },
+    Scope {
+        body: Vec<Box<Node>>
+    },
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct NodeVariable {
-    pub name: String,
-    pub value: ExprNodeTypes
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum NodeTypes {
-    Variable(NodeVariable),
-    Log(Vec<ExprNodeTypes>),
-    Logl(Vec<ExprNodeTypes>),
-    Check(ExprConditional, Vec<Node>),
-    While(ExprConditional, Vec<Node>)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Node {
-    pub r#type: NodeTypes
+    // Commands
+    Log {
+        r#type: String,
+        args: Vec<Box<Node>>
+    },
+    Check {
+        condition: Box<Node>,
+        scope: Box<Node>
+    },
+    While {
+        condition: Box<Node>,
+        scope: Box<Node>
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct Parser {
-    nodes: Vec<Node>,
+pub struct Parser<T: Iterator<Item = Token> + Clone> {
+    tokens: T,
+    current_token: Option<Token>
 }
 
-impl Parser {
-    pub fn new() -> Self {
-        Self { nodes: Vec::new() }
+impl<T: Iterator<Item = Token> + Clone> Parser<T> {
+    pub fn new(mut tokens: T) -> Self {
+        let current_token = tokens.next();
+        Self { tokens, current_token }
     }
 
-    fn parse_variable(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
-        let identifier = match tokens.peek() {
-            Some(curr_token) if curr_token.r#type == TokenTypes::Identifier => { curr_token.value.as_ref().unwrap() },
-            curr_token => {
-                println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'set'");
-                println!("{color_yellow}Position{color_reset} -> {}:{}", curr_token.unwrap().line, curr_token.unwrap().col);
-                exit(1);
-            }
-        };
+    fn parse_set_command(&mut self) -> Result<Node, String> {
+        self.advance();
 
-        tokens.next();
+        let identifier = self.parse_identifier()?;
 
-        let variable = match tokens.peek() {
-            Some(curr_token) => match curr_token.r#type {
-                TokenTypes::StringLiteral => NodeVariable { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::String(curr_token.value.clone().unwrap())) },
-                TokenTypes::IntLiteral => NodeVariable { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::Int(curr_token.value.clone().unwrap().parse::<i32>().unwrap())) },
-                TokenTypes::Boolean => NodeVariable { name: identifier.to_string(), value: ExprNodeTypes::Literal(LiteralTypes::Boolean(curr_token.value.clone().unwrap().parse::<bool>().unwrap())) },
-                _ => {
-                    println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Unknown Identifier '{}'", curr_token.value.as_ref().unwrap());
-                    println!("{color_yellow}Position{color_reset} -> {}:{}", curr_token.line, curr_token.col);
-                    exit(1);
-                }
+        let value = match &self.current_token {
+            Some(node) => match node.r#type {
+                TokenTypes::IntLiteral => Literals::Int(node.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::StringLiteral => Literals::String(node.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::BooleanLiteral => Literals::Boolean(node.value.clone().unwrap().parse().unwrap()),
+                _ => return Err(format!("Expected a literal, but found {:?}", node.r#type))
             },
-            curr_token => {
-                println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'set'");
-                println!("{color_yellow}Position{color_reset} -> {}:{}", curr_token.unwrap().line, curr_token.unwrap().col);
-                exit(1);
-            }
+            None => return Err(format!("Unexpected end of input while parsing set command"))
         };
 
-        Some(Node { r#type: NodeTypes::Variable(variable) })
+        self.advance();
+
+        Ok(Node::Var {
+            identifier: Box::new(identifier),
+            value
+        })
     }
 
-    fn parse_log(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, command: &String) -> Option<Node> {
-        let mut args: Vec<ExprNodeTypes> = Vec::new();
+    fn parse_log_command(&mut self, command: String) -> Result<Node, String> {
+        self.advance();
 
-        while let Some(&curr_token) = tokens.peek() {
-            match curr_token.r#type {
-                TokenTypes::Identifier => { args.push(ExprNodeTypes::Identifier(tokens.next().unwrap().value.clone().unwrap())); },
-                TokenTypes::StringLiteral => { args.push(ExprNodeTypes::Literal(LiteralTypes::String(tokens.next().unwrap().value.clone().unwrap()))); },
-                TokenTypes::IntLiteral => { args.push(ExprNodeTypes::Literal(LiteralTypes::Int(tokens.next().unwrap().value.clone().unwrap().parse::<i32>().unwrap()))); },
-                TokenTypes::Boolean => { args.push(ExprNodeTypes::Literal(LiteralTypes::Boolean(tokens.next().unwrap().value.clone().unwrap().parse::<bool>().unwrap()))); },
+        let mut args: Vec<Box<Node>> = vec![];
+
+        while let Some(arg) = &self.current_token {
+            match arg.r#type {
+                TokenTypes::IntLiteral |
+                TokenTypes::StringLiteral |
+                TokenTypes::BooleanLiteral => {
+                    let literal = self.parse_literal()?;
+                    args.push(Box::new(literal));
+                },
+                TokenTypes::Identifier => {
+                    let var = self.parse_identifier()?;
+                    args.push(Box::new(var));
+                },
                 _ => break
             }
         }
 
-        match command.as_str() {
-            "log" => Some( Node { r#type: NodeTypes::Log(args) } ),
-            "logl" => Some( Node { r#type: NodeTypes::Logl(args) } ),
-            _ => None
-        }
-    }
-
-    fn parse_check(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
-        let mut childrens: Vec<Node> = Vec::new();
-
-        let condition = match self.get_conditional(tokens) {
-            Some(cond) => cond,
-            None => {
-                println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'check'");
-                exit(1);
-            }
-        };
-
-        if tokens.peek().unwrap().r#type == TokenTypes::OpenCurly {
-            tokens.next();
-
-            while let Some(curr_token) = tokens.clone().peek() {
-                if curr_token.r#type == TokenTypes::CloseCurly { break; }
-
-                tokens.next();
-                if let Some(parsed_token) = self.parse_token(tokens, curr_token) {
-                    childrens.push(parsed_token);
-                }
-            }
+        if args.is_empty() {
+            return Err(format!("Unexpected end of input while parsing {} command", command))
         }
 
-        Some(Node {
-            r#type: NodeTypes::Check(condition, childrens)
+        Ok(Node::Log {
+            r#type: command,
+            args
         })
     }
 
-    fn parse_while(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<Node> {
-        println!("ran");
-        let mut childrens: Vec<Node> = Vec::new();
+    fn parse_check_command(&mut self) -> Result<Node, String> {
+        self.advance();
 
-        let condition = match self.get_conditional(tokens) {
-            Some(cond) => cond,
-            None => {
-                println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'while'");
-                exit(1);
-            }
-        };
+        let condition = self.parse_condition()?;
+        let scope = self.parse_scope()?;
 
-        if tokens.peek().unwrap().r#type == TokenTypes::OpenCurly {
-            tokens.next();
-
-            while let Some(curr_token) = tokens.clone().peek() {
-                if curr_token.r#type == TokenTypes::CloseCurly { break; }
-
-                tokens.next();
-                if let Some(parsed_token) = self.parse_token(tokens, curr_token) {
-                    childrens.push(parsed_token);
-                }
-            }
-        }
-
-        Some(Node {
-            r#type: NodeTypes::While(condition, childrens)
+        Ok(Node::Check {
+            condition: Box::new(condition),
+            scope: Box::new(scope)
         })
     }
 
-    fn parse_token(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>, token: &Token) -> Option<Node> {
-        match token {
-            Token { r#type: TokenTypes::Command, value: Some(command), .. } => {
-                match command.as_str() {
-                    "set"           => Some(self.parse_variable(tokens)).unwrap(),
-                    "log" | "logl"  => Some(self.parse_log(tokens, command)).unwrap(),
-                    "check"         => Some(self.parse_check(tokens)).unwrap(),
-                    "while"         => Some(self.parse_while(tokens)).unwrap(),
-                    _ => None
-                }
-            },
-            _ => None
-        }
+    fn parse_while_command(&mut self) -> Result<Node, String> {
+        self.advance();
+
+        let condition = self.parse_condition()?;
+        let scope = self.parse_scope()?;
+
+        Ok(Node::While {
+            condition: Box::new(condition),
+            scope: Box::new(scope)
+        })
     }
 
-    pub fn parse(&mut self, source_tokens: Vec<Token>) -> Vec<Node> {
-        let mut tokens = source_tokens.iter().peekable();
+    fn parse_command(&mut self) -> Result<Node, String> {
+        if let Some(token) = &self.current_token {
+            let command = token.value.clone().unwrap();
 
-        while let Some(token) = tokens.next() {
-            if let Some(node) = self.parse_token(&mut tokens, token) {
-                self.nodes.push(node);
+            match command.as_str() {
+                "set"           =>  return self.parse_set_command(),
+                "log" | "logl"  =>  return self.parse_log_command(command),
+                "check"         =>  return self.parse_check_command(),
+                "while"         =>  return self.parse_while_command(),
+                _ =>                return Err(format!("Expected a command, but found {:?}", token.r#type))
             }
         }
 
-        self.nodes.clone()
+        return Err("Unexpected end of input while parsing command".to_string());
     }
 
-    fn get_conditional(&mut self, tokens: &mut Peekable<std::slice::Iter<Token>>) -> Option<ExprConditional> {
-        let get_expr = |token: &Token| {
-            match token.r#type {
-                TokenTypes::IntLiteral => ExprNodeTypes::Literal(LiteralTypes::Int(token.value.as_ref().unwrap().parse::<i32>().unwrap())),
-                TokenTypes::StringLiteral => ExprNodeTypes::Literal(LiteralTypes::String(token.value.as_ref().unwrap().to_string())),
-                TokenTypes::Boolean => ExprNodeTypes::Literal(LiteralTypes::Boolean(token.value.as_ref().unwrap().parse::<bool>().unwrap())),
-                TokenTypes::Identifier => ExprNodeTypes::Identifier(token.value.as_ref().unwrap().to_string()),
-                _ => {
-                    println!("{color_red}[ERROR]{color_reset}  -> Syntax Error: Wrong usage of 'check'");
-                    println!("{color_yellow}Position{color_reset} -> {}:{}", token.line, token.col);
-                    exit(1);
-                }
+    fn parse_literal(&mut self) -> Result<Node, String> {
+        if let Some(token) = &self.current_token {
+            let value: Option<Literals> = match token.r#type {
+                TokenTypes::IntLiteral => Some(Literals::Int(token.value.clone().unwrap().parse().unwrap())),
+                TokenTypes::StringLiteral => Some(Literals::String(token.value.clone().unwrap().parse().unwrap())),
+                TokenTypes::BooleanLiteral => Some(Literals::Boolean(token.value.clone().unwrap().parse().unwrap())),
+                _ => None
+            };
+
+            if value.is_none() {
+                return Err(format!(
+                    "Expected a literal, but found {:?}",
+                    token.r#type
+                ));
             }
+
+            self.advance();
+            return Ok(Node::Literal(value.unwrap()))
+        }
+
+        return Err(format!("Unexpected end of input while parsing literal"));
+    }
+
+    fn parse_identifier(&mut self) -> Result<Node, String> {
+        if let Some(token) = &self.current_token.clone() {
+            if !token.r#type.is_identifier() {
+                return Err(format!("Expected a identifier, but found {:?}", token.r#type));
+            }
+
+            self.advance();
+
+            return Ok(Node::Identifier(token.value.clone().unwrap()));
+        }
+
+        return Err(format!("Unexpected end of input while parsing identifier"))
+    }
+
+    fn parse_condition(&mut self) -> Result<Node, String> {
+        let left = self.parse_literal()?;
+
+        let condition = match &self.current_token.clone().unwrap().r#type {
+            TokenTypes::EqEq => "==",
+            TokenTypes::NotEq => "!=",
+            TokenTypes::GThan => ">",
+            TokenTypes::GThanEq => ">=",
+            TokenTypes::LThan => "<",
+            TokenTypes::LThanEq => "<=",
+            token_type => return Err(format!("Expected a condition, but found {:?}", token_type))
         };
 
-        if let Some(&left) = tokens.peek() {
-            if  left.r#type == TokenTypes::IntLiteral ||
-                left.r#type == TokenTypes::StringLiteral ||
-                left.r#type == TokenTypes::Boolean ||
-                left.r#type == TokenTypes::Identifier {
-                tokens.next();
+        self.advance();
 
-                if let Some(&conditional_type) = tokens.peek() {
-                    if  conditional_type.r#type == TokenTypes::EqEq ||
-                        conditional_type.r#type == TokenTypes::NotEq ||
-                        conditional_type.r#type == TokenTypes::GThan ||
-                        conditional_type.r#type == TokenTypes::GThanEq ||
-                        conditional_type.r#type == TokenTypes::LThan ||
-                        conditional_type.r#type == TokenTypes::LThanEq {
-                        tokens.next();
+        let right = self.parse_literal()?;
 
-                        if let Some(&right) = tokens.peek() {
-                            if  right.r#type == TokenTypes::IntLiteral ||
-                                right.r#type == TokenTypes::StringLiteral ||
-                                right.r#type == TokenTypes::Boolean ||
-                                right.r#type == TokenTypes::Identifier {
-                                tokens.next();
+        Ok(Node::Condition {
+            left: Box::new(left),
+            condition: condition.to_string(),
+            right: Box::new(right)
+        })
+    }
 
-                                return Some(ExprConditional {
-                                    left: Box::new(get_expr(left)),
-                                    right: Box::new(get_expr(right)),
-                                    condition_type: conditional_type.r#type
-                                })
-                            }
-                        }
+    fn parse_scope(&mut self) -> Result<Node, String> {
+        self.advance();
+
+        let mut body: Vec<Box<Node>> = vec![];
+
+        while let Some(token) = &self.current_token {
+            if token.r#type.is_close_curly() {
+                self.advance();
+                break;
+            }
+
+            let parsed_token = self.parse_token()?;
+            body.push(Box::new(parsed_token));
+        }
+
+        Ok(Node::Scope {
+            body
+        })
+    }
+
+    // Parse all expressions
+    fn parse_expr(&mut self) -> Result<Node, String> {
+        if let Some(token) = &self.current_token {
+            if token.r#type.is_literal() || token.r#type.is_identifier() {
+                // Check & Parse Condition
+                if let Some(condition) = self.peek() {
+                    if condition.r#type.is_condition_op() {
+                        return self.parse_condition();
                     }
                 }
             }
+
+            // Check & Parse Literal
+            if token.r#type.is_literal() {
+                return self.parse_literal();
+            }
+
+            // Check & Parse Identifier
+            if token.r#type.is_identifier() {
+                return self.parse_identifier();
+            }
+
+            // Check & Parse Scope
+            if token.r#type.is_open_curly() {
+                return self.parse_scope();
+            }
         }
 
-        None
+        Err(format!("Unexpected end of input while parsing expression"))
+    }
+
+    fn parse_token(&mut self) -> Result<Node, String> {
+        if let Some(token) = &self.current_token {
+            if token.r#type.is_command() {
+                return self.parse_command();
+            } else {
+                return self.parse_expr();
+            }
+        }
+
+        Err(format!("Unhandled Token {:?}", &self.current_token))
+    }
+
+    pub fn parse(&mut self) -> Result<Vec<Node>, String> {
+        let mut ast = Vec::new();
+
+        while let Some(_) = &self.current_token {
+            let parsed_token = self.parse_token()?;
+            ast.push(parsed_token);
+        }
+
+        Ok(ast)
+    }
+
+    fn advance(&mut self) {
+        self.current_token = self.tokens.next();
+    }
+
+    fn peek(&self) -> Option<Token> {
+        self.tokens.clone().next()
     }
 }
