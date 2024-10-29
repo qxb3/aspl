@@ -14,7 +14,7 @@ pub enum TokenTypes {
     AND,
     OR,
     OpenCurly,
-    CloseCurly,
+    CloseCurly
 }
 
 impl TokenTypes {
@@ -131,7 +131,7 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
         let mut buffer = String::new();
 
         while let Some(char) = &self.current_char {
-            if !char.is_alphanumeric() {
+            if !char.is_alphanumeric() && char != &'_' {
                 break;
             }
 
@@ -140,9 +140,10 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
         }
 
         let identifier = match buffer.as_str() {
-            "log" | "logl"  |
-            "set" | "check" |
-            "while" => Token {
+            "log"   | "logl"  |
+            "set"   | "check" |
+            "while" | "fn"    |
+            "ret" => Token {
                 r#type: TokenTypes::Command,
                 value: Some(buffer.to_owned()),
                 line: self.line,

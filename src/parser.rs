@@ -11,6 +11,7 @@ pub enum Literals {
 pub enum Node {
     Literal(Literals),
     Identifier(String),
+    Return(Box<Node>),
     Var {
         identifier: Box<Node>,
         value: Literals
@@ -22,6 +23,11 @@ pub enum Node {
     },
     Scope {
         body: Vec<Box<Node>>
+    },
+    Function {
+        identifier: Box<Node>,
+        args: Vec<Box<Node>>,
+        scope: Box<Node>
     },
 
     // Commands
@@ -134,15 +140,15 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                     condition: Box::new(literal),
                     scope: Box::new(scope)
                 });
-            } else {
-                let condition = self.parse_condition()?;
-                let scope = self.parse_scope()?;
-
-                return Ok(Node::Check {
-                    condition: Box::new(condition),
-                    scope: Box::new(scope)
-                })
             }
+
+            let condition = self.parse_condition()?;
+            let scope = self.parse_scope()?;
+
+            return Ok(Node::Check {
+                condition: Box::new(condition),
+                scope: Box::new(scope)
+            })
         }
 
         Err(ParserError {
@@ -163,19 +169,74 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                     condition: Box::new(literal),
                     scope: Box::new(scope)
                 });
-            } else {
-                let condition = self.parse_condition()?;
-                let scope = self.parse_scope()?;
-
-                return Ok(Node::While {
-                    condition: Box::new(condition),
-                    scope: Box::new(scope)
-                })
             }
+
+            let condition = self.parse_condition()?;
+            let scope = self.parse_scope()?;
+
+            return Ok(Node::While {
+                condition: Box::new(condition),
+                scope: Box::new(scope)
+            })
         }
 
         Err(ParserError {
             message: format!("Unexpected end of input while parsing while command"),
+            token: None
+        })
+    }
+
+    fn parse_function(&mut self) -> ParserResult<Node>{
+        self.advance();
+
+        let identifier = self.parse_identifier()?;
+        let mut args: Vec<Box<Node>> = vec![];
+
+        while let Some(token) = &self.current_token {
+            if !token.r#type.is_identifier() {
+                break;
+            }
+
+            if let Ok(arg) = self.parse_identifier() {
+                args.push(Box::new(arg));
+            }
+        }
+
+        let scope = self.parse_scope()?;
+
+        Ok(Node::Function {
+            identifier: Box::new(identifier.clone()),
+            args,
+            scope: Box::new(scope)
+        })
+    }
+
+    fn parse_return(&mut self) -> ParserResult<Node> {
+        self.advance();
+
+        if let Some(token) = &self.current_token {
+            if token.r#type.is_literal() {
+                let ret_identifier = self.parse_literal()?;
+                return Ok(Node::Return(
+                    Box::new(ret_identifier)
+                ))
+            }
+
+            if token.r#type.is_identifier() {
+                let ret_literal = self.parse_identifier()?;
+                return Ok(Node::Return(
+                    Box::new(ret_literal)
+                ))
+            }
+
+            return Err(ParserError {
+                message: format!("Expected a literal or identifier, but found {:?}", token.r#type),
+                token: Some(token.clone())
+            });
+        }
+
+        Err(ParserError {
+            message: format!("Unexpected end of input while parsing return"),
             token: None
         })
     }
@@ -190,6 +251,8 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 "log" | "logl"  =>  return self.parse_log_command(command),
                 "check"         =>  return self.parse_check_command(),
                 "while"         =>  return self.parse_while_command(),
+                "fn"            =>  return self.parse_function(),
+                "ret"           =>  return self.parse_return(),
 
                 _ =>  return Err(ParserError {
                     message: format!("Expected a command, but found {:?}", token.r#type),
