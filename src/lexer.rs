@@ -14,7 +14,8 @@ pub enum TokenTypes {
     AND,
     OR,
     OpenCurly,
-    CloseCurly
+    CloseCurly,
+    NewLine
 }
 
 impl TokenTypes {
@@ -166,44 +167,44 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
         Ok(identifier)
     }
 
-    fn parse_symbol(&mut self) -> LexerResult<Token> {
-        if let Some(char) = &self.current_char.clone() {
-            let token_type = match char {
-                '=' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::EqEq),
-                '!' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::NotEq),
-                '>' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::GThanEq),
-                '<' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::LThanEq),
+    fn parse_symbol(&mut self, char: char) -> LexerResult<Token> {
+        let token_type = match char {
+            '=' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::EqEq),
+            '!' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::NotEq),
+            '>' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::GThanEq),
+            '<' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::LThanEq),
 
-                '>' => Some(TokenTypes::GThan),
-                '<' => Some(TokenTypes::LThan),
+            '>' => Some(TokenTypes::GThan),
+            '<' => Some(TokenTypes::LThan),
 
-                '&' if self.peek().unwrap_or_default() == '&' => Some(TokenTypes::AND),
-                '|' if self.peek().unwrap_or_default() == '|' => Some(TokenTypes::OR),
+            '&' if self.peek().unwrap_or_default() == '&' => Some(TokenTypes::AND),
+            '|' if self.peek().unwrap_or_default() == '|' => Some(TokenTypes::OR),
 
-                '{' => Some(TokenTypes::OpenCurly),
-                '}' => Some(TokenTypes::CloseCurly),
+            '{' => Some(TokenTypes::OpenCurly),
+            '}' => Some(TokenTypes::CloseCurly),
 
-                _ => None,
-            };
+            _ => None,
+        };
 
-            if let Some(token_type) = token_type {
-                if matches!(token_type,
-                    TokenTypes::EqEq |
-                    TokenTypes::NotEq |
-                    TokenTypes::GThanEq |
-                    TokenTypes::LThanEq |
-                    TokenTypes::AND |
-                    TokenTypes::OR) {
-                    self.advance();
-                }
-
-                return Ok(Token {
-                    r#type: token_type,
-                    value: None,
-                    line: self.line,
-                    col: self.col
-                });
+        if let Some(token_type) = token_type {
+            if matches!(token_type,
+                TokenTypes::EqEq |
+                TokenTypes::NotEq |
+                TokenTypes::GThanEq |
+                TokenTypes::LThanEq |
+                TokenTypes::AND |
+                TokenTypes::OR) {
+                self.advance();
             }
+
+            self.advance();
+
+            return Ok(Token {
+                r#type: token_type,
+                value: None,
+                line: self.line,
+                col: self.col
+            });
         }
 
         Err(LexerError {
@@ -216,7 +217,22 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
         let mut parsed_tokens: Vec<Token> = vec![];
 
         while let Some(char) = self.current_char {
-            if char.eq(&'"') {
+            if char == '\n' {
+                parsed_tokens.push(Token {
+                    r#type: TokenTypes::NewLine,
+                    value: None,
+                    line: self.line,
+                    col: self.col
+                });
+
+                self.line += 1;
+                self.col = 1;
+                self.advance();
+
+                continue;
+            }
+
+            if char == '"' {
                 let str_lit = self.lex_str_lit()?;
                 parsed_tokens.push(str_lit);
 
@@ -244,15 +260,8 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
                 continue;
             }
 
-            let symbol = self.parse_symbol()?;
+            let symbol = self.parse_symbol(char)?;
             parsed_tokens.push(symbol);
-
-            if char.eq(&'\n') {
-                self.line += 1;
-                self.col = 1;
-            }
-
-            self.advance();
         }
 
         Ok(parsed_tokens)
