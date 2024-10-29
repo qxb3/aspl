@@ -1,10 +1,11 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenTypes {
     Identifier,
-    Command,
+    Statement,
     StringLiteral,
     IntLiteral,
     BooleanLiteral,
+    FnCall,
     EqEq,
     NotEq,
     GThan,
@@ -18,7 +19,7 @@ pub enum TokenTypes {
 }
 
 impl TokenTypes {
-    pub fn is_command(&self) -> bool { matches!(self, TokenTypes::Command) }
+    pub fn is_statement(&self) -> bool { matches!(self, TokenTypes::Statement) }
     pub fn is_identifier(&self) -> bool { matches!(self, TokenTypes::Identifier) }
     pub fn is_open_curly(&self) -> bool { matches!(self, TokenTypes::OpenCurly) }
     pub fn is_close_curly(&self) -> bool { matches!(self, TokenTypes::CloseCurly) }
@@ -144,7 +145,7 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
             "set"   | "check" |
             "while" | "fn"    |
             "ret" => Token {
-                r#type: TokenTypes::Command,
+                r#type: TokenTypes::Statement,
                 value: Some(buffer.to_owned()),
                 line: self.line,
                 col: self.col
@@ -167,7 +168,32 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
         Ok(identifier)
     }
 
-    fn parse_symbol(&mut self, char: char) -> LexerResult<Token> {
+    fn lex_fn_call(&mut self) -> LexerResult<Token> {
+        self.advance();
+
+        let mut buffer = String::new();
+
+        while let Some(char) = &self.current_char {
+            if !char.is_alphanumeric() && char != &'_' {
+                break;
+            }
+
+            buffer.push(char.to_owned());
+            self.advance();
+        }
+
+        let fn_call = Ok(Token {
+            r#type: TokenTypes::FnCall,
+            value: Some(buffer.to_owned()),
+            line: self.line,
+            col: self.col
+        });
+
+        self.col += buffer.len();
+        fn_call
+    }
+
+    fn lex_symbol(&mut self, char: char) -> LexerResult<Token> {
         let token_type = match char {
             '=' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::EqEq),
             '!' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::NotEq),
@@ -225,6 +251,13 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
                 continue;
             }
 
+            if char.is_whitespace() {
+                self.col += 1;
+                self.advance();
+
+                continue;
+            }
+
             if char == '"' {
                 let str_lit = self.lex_str_lit()?;
                 parsed_tokens.push(str_lit);
@@ -246,14 +279,14 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
                 continue;
             }
 
-            if char.is_whitespace() {
-                self.col += 1;
-                self.advance();
+            if char == '@' {
+                let fn_call = self.lex_fn_call()?;
+                parsed_tokens.push(fn_call);
 
                 continue;
             }
 
-            let symbol = self.parse_symbol(char)?;
+            let symbol = self.lex_symbol(char)?;
             parsed_tokens.push(symbol);
         }
 

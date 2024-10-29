@@ -14,7 +14,7 @@ pub enum Node {
     Return(Box<Node>),
     Var {
         identifier: Box<Node>,
-        value: Literals
+        value: Box<Node>
     },
     Condition {
         left: Box<Node>,
@@ -29,8 +29,12 @@ pub enum Node {
         args: Vec<Box<Node>>,
         scope: Box<Node>
     },
+    FunctionCall {
+        identifier: Box<Node>,
+        args: Vec<Box<Node>>
+    },
 
-    // Commands
+    // Statements
     Log {
         r#type: String,
         args: Vec<Box<Node>>
@@ -65,23 +69,25 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         Self { tokens, current_token }
     }
 
-    fn parse_set_command(&mut self) -> ParserResult<Node> {
+    fn parse_set_statement(&mut self) -> ParserResult<Node> {
         self.advance();
 
         let identifier = self.parse_identifier()?;
 
         let value = match &self.current_token {
             Some(node) => match node.r#type {
-                TokenTypes::IntLiteral => Literals::Int(node.value.clone().unwrap().parse().unwrap()),
-                TokenTypes::StringLiteral => Literals::String(node.value.clone().unwrap().parse().unwrap()),
-                TokenTypes::BooleanLiteral => Literals::Boolean(node.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::IntLiteral => Node::Literal(Literals::Int(node.value.clone().unwrap().parse().unwrap())),
+                TokenTypes::StringLiteral => Node::Literal(Literals::String(node.value.clone().unwrap().parse().unwrap())),
+                TokenTypes::BooleanLiteral => Node::Literal(Literals::Boolean(node.value.clone().unwrap().parse().unwrap())),
+                TokenTypes::Identifier => self.parse_identifier()?,
+                TokenTypes::FnCall => self.parse_function_call()?,
                 _ => return Err(ParserError {
-                    message: format!("Expected a literal, but found {:?}", node.r#type),
+                    message: format!("Expected a literal/identifier/function call, but found {:?}", node.r#type),
                     token: Some(node.clone())
                 })
             },
             None => return Err(ParserError {
-                message: format!("Unexpected end of input while parsing set command"),
+                message: format!("Unexpected end of input while parsing set statement"),
                 token: None
             })
         };
@@ -90,11 +96,11 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         Ok(Node::Var {
             identifier: Box::new(identifier),
-            value
+            value: Box::new(value)
         })
     }
 
-    fn parse_log_command(&mut self, command: String) -> ParserResult<Node> {
+    fn parse_log_statement(&mut self, statement: String) -> ParserResult<Node> {
         self.advance();
 
         let mut args: Vec<Box<Node>> = vec![];
@@ -117,18 +123,18 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         if args.is_empty() {
             return Err(ParserError {
-                message: format!("Unexpected end of input while parsing {} command", command),
+                message: format!("Unexpected end of input while parsing {} statement", statement),
                 token: None
             });
         }
 
         Ok(Node::Log {
-            r#type: command,
+            r#type: statement,
             args
         })
     }
 
-    fn parse_check_command(&mut self) -> ParserResult<Node> {
+    fn parse_check_statement(&mut self) -> ParserResult<Node> {
         self.advance();
 
         if let Some(token) = &self.current_token {
@@ -152,12 +158,12 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         }
 
         Err(ParserError {
-            message: format!("Unexpected end of input while parsing check command"),
+            message: format!("Unexpected end of input while parsing check statement"),
             token: None
         })
     }
 
-    fn parse_while_command(&mut self) -> ParserResult<Node> {
+    fn parse_while_statement(&mut self) -> ParserResult<Node> {
         self.advance();
 
         if let Some(token) = &self.current_token {
@@ -181,7 +187,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         }
 
         Err(ParserError {
-            message: format!("Unexpected end of input while parsing while command"),
+            message: format!("Unexpected end of input while parsing while statement"),
             token: None
         })
     }
@@ -241,28 +247,28 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         })
     }
 
-    // Parse all commands
-    fn parse_command(&mut self) -> ParserResult<Node> {
+    // Parse all statements
+    fn parse_statement(&mut self) -> ParserResult<Node> {
         if let Some(token) = &self.current_token {
-            let command = token.value.clone().unwrap();
+            let statement = token.value.clone().unwrap();
 
-            match command.as_str() {
-                "set"           =>  return self.parse_set_command(),
-                "log" | "logl"  =>  return self.parse_log_command(command),
-                "check"         =>  return self.parse_check_command(),
-                "while"         =>  return self.parse_while_command(),
+            match statement.as_str() {
+                "set"           =>  return self.parse_set_statement(),
+                "log" | "logl"  =>  return self.parse_log_statement(statement),
+                "check"         =>  return self.parse_check_statement(),
+                "while"         =>  return self.parse_while_statement(),
                 "fn"            =>  return self.parse_function(),
                 "ret"           =>  return self.parse_return(),
 
                 _ =>  return Err(ParserError {
-                    message: format!("Expected a command, but found {:?}", token.r#type),
+                    message: format!("Expected a statement, but found {:?}", token.r#type),
                     token: Some(token.clone())
                 })
             }
         }
 
         Err(ParserError {
-            message: format!("Unexpected end of input while parsing command"),
+            message: format!("Unexpected end of input while parsing statement"),
             token: None
         })
     }
@@ -367,6 +373,35 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         })
     }
 
+    fn parse_function_call(&mut self) -> ParserResult<Node> {
+        let identifier = match &self.current_token {
+            Some(token) => Node::Identifier(token.clone().value.unwrap_or_default()),
+            None => return Err(ParserError {
+                message: format!("Unexpected end of input while parsing function call"),
+                token: None
+            })
+        };
+
+        self.advance();
+
+        let mut args: Vec<Box<Node>> = vec![];
+
+        while let Some(token) = &self.current_token {
+            let foo = match token.r#type {
+                r#type if r#type.is_literal() => self.parse_literal()?,
+                r#type if r#type.is_identifier() => self.parse_identifier()?,
+                _ => break
+            };
+
+            args.push(Box::new(foo));
+        }
+
+        Ok(Node::FunctionCall {
+            identifier: Box::new(identifier),
+            args
+        })
+    }
+
     // Parse all expressions
     fn parse_expr(&mut self) -> ParserResult<Node> {
         if let Some(token) = &self.current_token {
@@ -386,7 +421,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
             // Check & Parse Identifier
             if token.r#type.is_identifier() {
-                return self.parse_identifier();
+                return self.parse_function_call();
             }
 
             // Check & Parse Scope
@@ -403,8 +438,8 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
     fn parse_token(&mut self) -> ParserResult<Node> {
         if let Some(token) = &self.current_token {
-            if token.r#type.is_command() {
-                return self.parse_command();
+            if token.r#type.is_statement() {
+                return self.parse_statement();
             }
 
             return self.parse_expr();
