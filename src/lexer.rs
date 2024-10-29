@@ -15,7 +15,6 @@ pub enum TokenTypes {
     OR,
     OpenCurly,
     CloseCurly,
-    NewLine
 }
 
 impl TokenTypes {
@@ -218,13 +217,6 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
 
         while let Some(char) = self.current_char {
             if char == '\n' {
-                parsed_tokens.push(Token {
-                    r#type: TokenTypes::NewLine,
-                    value: None,
-                    line: self.line,
-                    col: self.col
-                });
-
                 self.line += 1;
                 self.col = 1;
                 self.advance();
