@@ -3,7 +3,7 @@ use crate::lexer::{Token, TokenTypes};
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Literals {
     String(String),
-    Int(i32),
+    Int(i64),
     Boolean(bool)
 }
 
