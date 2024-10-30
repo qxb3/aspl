@@ -23,6 +23,7 @@ impl TokenTypes {
     pub fn is_identifier(&self) -> bool { matches!(self, TokenTypes::Identifier) }
     pub fn is_open_curly(&self) -> bool { matches!(self, TokenTypes::OpenCurly) }
     pub fn is_close_curly(&self) -> bool { matches!(self, TokenTypes::CloseCurly) }
+    pub fn is_fn_call(&self) -> bool { matches!(self, TokenTypes::FnCall) }
 
     pub fn is_literal(&self) -> bool{
         return matches!(self,

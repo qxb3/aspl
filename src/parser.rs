@@ -414,6 +414,11 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 }
             }
 
+            // Check & Parse Fn Call
+            if token.r#type.is_fn_call() {
+                return self.parse_function_call();
+            }
+
             // Check & Parse Literal
             if token.r#type.is_literal() {
                 return self.parse_literal();
@@ -421,7 +426,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
             // Check & Parse Identifier
             if token.r#type.is_identifier() {
-                return self.parse_function_call();
+                return self.parse_identifier();
             }
 
             // Check & Parse Scope
