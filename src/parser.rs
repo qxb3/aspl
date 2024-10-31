@@ -140,6 +140,20 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         self.advance();
 
         if let Some(token) = &self.current_token {
+            if token.r#type.is_literal() || token.r#type.is_identifier() {
+                if let Some(condition) = self.peek() {
+                    if condition.r#type.is_condition_op() {
+                        let condition = self.parse_condition()?;
+                        let scope = self.parse_scope()?;
+
+                        return Ok(Node::Check {
+                            condition: Box::new(condition),
+                            scope: Box::new(scope)
+                        })
+                    }
+                }
+            }
+
             if token.r#type.is_literal() {
                 let literal = self.parse_literal()?;
                 let scope = self.parse_scope()?;
@@ -149,14 +163,6 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                     scope: Box::new(scope)
                 });
             }
-
-            let condition = self.parse_condition()?;
-            let scope = self.parse_scope()?;
-
-            return Ok(Node::Check {
-                condition: Box::new(condition),
-                scope: Box::new(scope)
-            })
         }
 
         Err(ParserError {
@@ -169,22 +175,33 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         self.advance();
 
         if let Some(token) = &self.current_token {
+            if token.r#type.is_literal() || token.r#type.is_identifier() {
+                if let Some(condition) = self.peek() {
+                    if condition.r#type.is_condition_op() {
+                        let condition = self.parse_condition()?;
+                        let scope = self.parse_scope()?;
+
+                        return Ok(Node::Check {
+                            condition: Box::new(condition),
+                            scope: Box::new(scope)
+                        })
+                    }
+                }
+            }
+
             if token.r#type.is_literal() {
                 let literal = self.parse_literal()?;
                 let scope = self.parse_scope()?;
 
-                return Ok(Node::While {
+                return Ok(Node::Check {
                     condition: Box::new(literal),
                     scope: Box::new(scope)
                 });
             }
 
-            let condition = self.parse_condition()?;
-            let scope = self.parse_scope()?;
-
-            return Ok(Node::While {
-                condition: Box::new(condition),
-                scope: Box::new(scope)
+            return Err(ParserError {
+                message: format!("Expected a condition or literal, but found {:?}", token),
+                token: Some(token.clone())
             })
         }
 
@@ -293,7 +310,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
             if value.is_none() {
                 return Err(ParserError {
-                    message: format!("Expected a litera, but found {:?}", token.r#type),
+                    message: format!("Expected a literal, but found {:?}", token.r#type),
                     token: Some(token.clone())
                 });
             }
