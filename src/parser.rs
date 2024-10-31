@@ -92,8 +92,6 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             })
         };
 
-        self.advance();
-
         Ok(Node::Var {
             identifier: Box::new(identifier),
             value: Box::new(value)
