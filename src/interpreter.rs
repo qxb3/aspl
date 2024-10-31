@@ -218,6 +218,29 @@ impl Interpreter {
         Ok(Values::None)
     }
 
+    fn handle_update(&mut self, identifier: &Box<Node>, value: &Box<Node>) -> InterpreterResult<Values> {
+        let name = match identifier.deref() {
+            Node::Identifier(identifier) => identifier,
+            _ => unreachable!()
+        };
+
+        let val = match value.deref() {
+            Node::Literal(Literals::Int(integer)) => Values::Integer(integer.clone()),
+            Node::Literal(Literals::String(str)) => Values::String(str.clone()),
+            Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(boolean.clone()),
+            Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str())?,
+            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Unknown Type on variable {:?}", name)
+            })
+        };
+
+        self.env.borrow_mut().set(name.as_str(), val);
+
+        Ok(Values::None)
+    }
+
     fn handle_log(&mut self, log_type: &str, args: &Vec<Box<Node>>) -> InterpreterResult<Values> {
         let mut output = String::new();
 
@@ -396,6 +419,7 @@ impl Interpreter {
             Node::Return(value) => self.handle_ret(value),
             Node::Scope { body } => self.handle_scope(body),
             Node::Var { identifier, value } => self.handle_var(identifier, value),
+            Node::Update { identifier, value } => self.handle_update(identifier, value),
             Node::Check { condition, scope } => self.handle_check(condition, scope),
             Node::While { condition, scope } => self.handle_while(condition, scope),
             Node::Log { r#type, args } => self.handle_log(r#type.as_str(), args),

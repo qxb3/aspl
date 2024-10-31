@@ -142,10 +142,10 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
         }
 
         let identifier = match buffer.as_str() {
-            "log"   | "logl"  |
-            "set"   | "check" |
-            "while" | "fn"    |
-            "ret" => Token {
+            "log"   | "logl"    |
+            "set"   | "update"  |
+            "check" | "while"   |
+            "fn"    | "ret" => Token {
                 r#type: TokenTypes::Statement,
                 value: Some(buffer.to_owned()),
                 line: self.line,
