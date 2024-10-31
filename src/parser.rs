@@ -237,8 +237,15 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 ))
             }
 
+            if token.r#type.is_fn_call() {
+                let ret_fn_call = self.parse_function_call()?;
+                return Ok(Node::Return(
+                    Box::new(ret_fn_call)
+                ))
+            }
+
             return Err(ParserError {
-                message: format!("Expected a literal or identifier, but found {:?}", token.r#type),
+                message: format!("Expected a literal/identifier/fn_call, but found {:?}", token.r#type),
                 token: Some(token.clone())
             });
         }
