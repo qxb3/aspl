@@ -141,8 +141,8 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         if let Some(token) = &self.current_token {
             if token.r#type.is_literal() || token.r#type.is_identifier() {
-                if let Some(condition) = self.peek() {
-                    if condition.r#type.is_condition_op() {
+                if let Some(token) = self.peek() {
+                    if token.r#type.is_condition_op() {
                         let condition = self.parse_condition()?;
                         let scope = self.parse_scope()?;
 
@@ -181,7 +181,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                         let condition = self.parse_condition()?;
                         let scope = self.parse_scope()?;
 
-                        return Ok(Node::Check {
+                        return Ok(Node::While {
                             condition: Box::new(condition),
                             scope: Box::new(scope)
                         })
@@ -193,7 +193,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 let literal = self.parse_literal()?;
                 let scope = self.parse_scope()?;
 
-                return Ok(Node::Check {
+                return Ok(Node::While {
                     condition: Box::new(literal),
                     scope: Box::new(scope)
                 });
@@ -346,7 +346,20 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
     }
 
     fn parse_condition(&mut self) -> ParserResult<Node> {
-        let left = self.parse_literal()?;
+        let left = match &self.current_token {
+            Some(left) => match left {
+                left if left.r#type.is_identifier() => self.parse_identifier()?,
+                left if left.r#type.is_literal() => self.parse_literal()?,
+                left => return Err(ParserError {
+                    message: format!("Expected a identifier or literal, but found {:?}", left),
+                    token: Some(left.clone())
+                })
+            },
+            None => return Err(ParserError {
+                message: format!("Unexpected end of input while parsing condition"),
+                token: None
+            })
+        };
 
         let condition = match &self.current_token {
             Some(token) => match token.r#type {
@@ -370,7 +383,20 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         // Advance from condition
         self.advance();
 
-        let right = self.parse_literal()?;
+        let right = match &self.current_token {
+            Some(right) => match right {
+                right if right.r#type.is_identifier() => self.parse_identifier()?,
+                right if right.r#type.is_literal() => self.parse_literal()?,
+                right => return Err(ParserError {
+                    message: format!("Expected a identifier or literal, but found {:?}", right),
+                    token: Some(right.clone())
+                })
+            },
+            None => return Err(ParserError {
+                message: format!("Unexpected end of input while parsing condition"),
+                token: None
+            })
+        };
 
         Ok(Node::Condition {
             left: Box::new(left),
