@@ -41,8 +41,8 @@ fn print arg1 {
   logl arg
 }
 
-set msg get
-print msg
+set msg @get
+@print msg
 ```
 
 ## Using
