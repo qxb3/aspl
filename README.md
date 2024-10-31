@@ -59,6 +59,10 @@ cargo install aspl
 aspl <input.aspl>
 ```
 
+## Contribution
+
+Contributions to aspl are welcome! If you have ideas for improvements, new features, or bug fixes, feel free to open an issue or submit a pull request on [aspl](https://github.com/qxb3/aspl)
+
 ## LICENSE
 
 [LICENSE](https://github.com/qxb3/eiv/blob/main/LICENSE)
