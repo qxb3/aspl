@@ -1,24 +1,11 @@
-logl "start program"
-
-set left 5
-set right 5
-check left == right {
-  logl "5 is equals to 5"
+fn my_fn a {
+  logl a
 }
 
-while true == true {
-  logl "eeyyy 1"
-  logl "eeyyy 2"
+set a 10
+set b a
+
+while a >= b {
+  set c "You correcto"
+  @my_fn c
 }
-
-set int 69
-set str "hello, world"
-set bool true
-
-logl "variables:"
-logl "int: " int
-logl "str: " str
-logl "bool: " bool
-
-log "hello "
-log "world"

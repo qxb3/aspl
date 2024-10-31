@@ -24,6 +24,27 @@ check a < b {
 }
 ```
 
+### While loop
+```bash
+while true {
+  logl "loop"
+}
+```
+
+### Function
+```bash
+fn get {
+  ret "foobar"
+}
+
+fn print arg1 {
+  logl arg
+}
+
+set msg @get
+@print msg
+```
+
 ## Using
 
 ### Installation

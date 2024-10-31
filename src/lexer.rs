@@ -1,20 +1,46 @@
-use std::{iter::Peekable, str::Chars};
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TokenTypes {
     Identifier,
-    Command,
+    Statement,
     StringLiteral,
     IntLiteral,
-    Boolean,
+    BooleanLiteral,
+    FnCall,
     EqEq,
     NotEq,
     GThan,
     GThanEq,
     LThan,
     LThanEq,
+    AND,
+    OR,
     OpenCurly,
     CloseCurly
+}
+
+impl TokenTypes {
+    pub fn is_statement(&self) -> bool { matches!(self, TokenTypes::Statement) }
+    pub fn is_identifier(&self) -> bool { matches!(self, TokenTypes::Identifier) }
+    pub fn is_open_curly(&self) -> bool { matches!(self, TokenTypes::OpenCurly) }
+    pub fn is_close_curly(&self) -> bool { matches!(self, TokenTypes::CloseCurly) }
+    pub fn is_fn_call(&self) -> bool { matches!(self, TokenTypes::FnCall) }
+
+    pub fn is_literal(&self) -> bool{
+        return matches!(self,
+            TokenTypes::IntLiteral |
+            TokenTypes::StringLiteral |
+            TokenTypes::BooleanLiteral);
+    }
+
+    pub fn is_condition_op(&self) -> bool {
+        return matches!(self,
+            TokenTypes::EqEq |
+            TokenTypes::NotEq |
+            TokenTypes::GThan |
+            TokenTypes::GThanEq |
+            TokenTypes::LThan |
+            TokenTypes::LThanEq);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -25,120 +51,266 @@ pub struct Token {
     pub line: usize
 }
 
-pub struct Lexer {
-    tokens: Vec<Token>
+#[derive(Debug)]
+pub struct Lexer<T: Iterator<Item = char> + Clone> {
+    chars: T,
+    current_char: Option<char>,
+    line: usize,
+    col: usize
 }
 
-impl Lexer {
-    pub fn new() -> Self {
-        Self { tokens: Vec::new() }
+#[derive(Debug)]
+pub struct LexerError {
+    pub message: String,
+    pub char: Option<char>
+}
+
+type LexerResult<T> = Result<T, LexerError>;
+
+impl<T: Iterator<Item = char> + Clone> Lexer<T> {
+    pub fn new(mut chars: T) -> Self {
+        let current_char = chars.next();
+
+        Self {
+            chars,
+            current_char,
+            line: 1,
+            col: 1
+        }
     }
 
-    fn lex_string_lit(&mut self, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
+    fn lex_str_lit(&mut self) -> LexerResult<Token> {
         let mut buffer = String::new();
 
-        while let Some(curr_char) = chars.peek() {
-            if curr_char != &'"' {
-                buffer.push(chars.next().unwrap());
-                *col += 1;
-            } else {
+        // Ignore "
+        self.advance();
+
+        while let Some(char) = &self.current_char {
+            if char.eq(&'"') {
+                self.advance();
                 break;
             }
+
+            buffer.push(char.to_owned());
+            self.advance();
         }
 
-        // Ignore the current '"'
-        chars.next();
-        *col += 1;
+        let str_lit = Ok(Token {
+            r#type: TokenTypes::StringLiteral,
+            value: Some(buffer.to_owned()),
+            line: self.line,
+            col: self.col
+        });
 
-        self.tokens.push(Token { r#type: TokenTypes::StringLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
+        self.col += buffer.len() + 2;
+        str_lit
     }
 
-    fn lex_int_lit(&mut self, char: char, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
+    fn lex_int_lit(&mut self) -> LexerResult<Token> {
         let mut buffer = String::new();
 
-        buffer.push(char);
-
-        while let Some(curr_char) = chars.peek() {
-            if curr_char.is_numeric() {
-                buffer.push(chars.next().unwrap());
-                *col += 1;
-            } else {
+        while let Some(char) = &self.current_char {
+            if !char.is_numeric() {
                 break;
             }
+
+            buffer.push(char.to_owned());
+            self.advance();
         }
 
-        self.tokens.push(Token { r#type: TokenTypes::IntLiteral, value: Some(buffer), line: line.to_owned(), col: col.to_owned() });
+        let int_lit = Ok(Token {
+            r#type: TokenTypes::IntLiteral,
+            value: Some(buffer.to_owned()),
+            line: self.line,
+            col: self.col
+        });
+
+        self.col += buffer.len();
+        int_lit
     }
 
-    fn lex_command(&mut self, char: char, chars: &mut Peekable<Chars>, line: &mut usize, col: &mut usize) {
+    fn lex_identifier(&mut self) -> LexerResult<Token> {
         let mut buffer = String::new();
 
-        buffer.push(char);
-
-        while let Some(curr_char) = chars.peek() {
-            if curr_char.is_alphanumeric() {
-                buffer.push(chars.next().unwrap());
-            } else {
+        while let Some(char) = &self.current_char {
+            if !char.is_alphanumeric() && char != &'_' {
                 break;
             }
+
+            buffer.push(char.to_owned());
+            self.advance();
         }
 
-        *col += buffer.len();
+        let identifier = match buffer.as_str() {
+            "log"   | "logl"  |
+            "set"   | "check" |
+            "while" | "fn"    |
+            "ret" => Token {
+                r#type: TokenTypes::Statement,
+                value: Some(buffer.to_owned()),
+                line: self.line,
+                col: self.col
+            },
+            "true" | "false" => Token {
+                r#type: TokenTypes::BooleanLiteral,
+                value: Some(buffer.to_owned()),
+                line: self.line,
+                col: self.col
+            },
+            _ => Token {
+                r#type: TokenTypes::Identifier,
+                value: Some(buffer.to_owned()),
+                line: self.line,
+                col: self.col
+            }
+        };
 
-        match buffer.as_str() {
-            "log" | "logl"  |
-            "set" | "check" |
-            "while"             => { self.tokens.push(Token { r#type: TokenTypes::Command, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            "true" | "false"    => { self.tokens.push(Token { r#type: TokenTypes::Boolean, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); },
-            _                   => { self.tokens.push(Token { r#type: TokenTypes::Identifier, value: Some(buffer), line: line.to_owned(), col: col.to_owned() }); }
-        }
+        self.col += buffer.len();
+        Ok(identifier)
     }
 
-    pub fn lex(&mut self, source: &str) -> Vec<Token> {
-        let mut chars = source.chars().peekable();
-        let mut line: usize = 1;
-        let mut col: usize = 1;
+    fn lex_fn_call(&mut self) -> LexerResult<Token> {
+        self.advance();
 
-        while let Some(char) = chars.next() {
-            // Check if string literal
-            if char == '"' {
-                self.lex_string_lit(&mut chars, &mut line, &mut col);
-                continue;
+        let mut buffer = String::new();
+
+        while let Some(char) = &self.current_char {
+            if !char.is_alphanumeric() && char != &'_' {
+                break;
             }
 
-            // Check if int literal
-            if char.is_numeric() {
-                self.lex_int_lit(char, &mut chars, &mut line, &mut col);
-                continue;
+            buffer.push(char.to_owned());
+            self.advance();
+        }
+
+        let fn_call = Ok(Token {
+            r#type: TokenTypes::FnCall,
+            value: Some(buffer.to_owned()),
+            line: self.line,
+            col: self.col
+        });
+
+        self.col += buffer.len();
+        fn_call
+    }
+
+    fn lex_symbol(&mut self, char: char) -> LexerResult<Token> {
+        let token_type = match char {
+            '=' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::EqEq),
+            '!' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::NotEq),
+            '>' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::GThanEq),
+            '<' if self.peek().unwrap_or_default() == '=' => Some(TokenTypes::LThanEq),
+
+            '>' => Some(TokenTypes::GThan),
+            '<' => Some(TokenTypes::LThan),
+
+            '&' if self.peek().unwrap_or_default() == '&' => Some(TokenTypes::AND),
+            '|' if self.peek().unwrap_or_default() == '|' => Some(TokenTypes::OR),
+
+            '{' => Some(TokenTypes::OpenCurly),
+            '}' => Some(TokenTypes::CloseCurly),
+
+            _ => None,
+        };
+
+        if let Some(token_type) = token_type {
+            if matches!(token_type,
+                TokenTypes::EqEq |
+                TokenTypes::NotEq |
+                TokenTypes::GThanEq |
+                TokenTypes::LThanEq |
+                TokenTypes::AND |
+                TokenTypes::OR) {
+                self.advance();
             }
 
-            // Check if its command / identifier / boolean
-            if char.is_alphanumeric() && !char.is_numeric() {
-                self.lex_command(char, &mut chars, &mut line, &mut col);
-                continue;
-            }
+            self.advance();
 
-            match char {
-                // Check if conditional operators
-                comp if comp == '=' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::EqEq, value: None, line, col }); },
-                comp if comp == '!' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::NotEq, value: None, line, col }); },
-                comp if comp == '>' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::GThanEq, value: None, line, col }); },
-                comp if comp == '<' && chars.peek().unwrap() == &'=' => { self.tokens.push(Token { r#type: TokenTypes::LThanEq, value: None, line, col }); },
-                '>' => { self.tokens.push(Token { r#type: TokenTypes::GThan, value: None, line, col }); },
-                '<' => { self.tokens.push(Token { r#type: TokenTypes::LThan, value: None, line, col }); }
+            return Ok(Token {
+                r#type: token_type,
+                value: None,
+                line: self.line,
+                col: self.col
+            });
+        }
 
-                '{' => { self.tokens.push(Token { r#type: TokenTypes::OpenCurly, value: None, line, col }); },
-                '}' => { self.tokens.push(Token { r#type: TokenTypes::CloseCurly, value: None, line, col }); },
+        Err(LexerError {
+            message: "Unexpected end of input while lexing symbol".to_string(),
+            char: None
+        })
+    }
 
-                _ => ()
+    pub fn lex(&mut self) -> LexerResult<Vec<Token>> {
+        let mut parsed_tokens: Vec<Token> = vec![];
+        let mut comment = false;
+
+        while let Some(char) = self.current_char {
+            if char == '#' {
+                comment = true;
             }
 
             if char == '\n' {
-                line += 1;
-                col = 1;
+                comment = false;
+
+                self.line += 1;
+                self.col = 1;
+                self.advance();
+
+                continue;
             }
+
+            if comment {
+                self.advance();
+                continue;
+            }
+
+            if char.is_whitespace() {
+                self.col += 1;
+                self.advance();
+
+                continue;
+            }
+
+            if char == '"' {
+                let str_lit = self.lex_str_lit()?;
+                parsed_tokens.push(str_lit);
+
+                continue;
+            }
+
+            if char.is_numeric() {
+                let str_int = self.lex_int_lit()?;
+                parsed_tokens.push(str_int);
+
+                continue;
+            }
+
+            if char.is_alphanumeric() && !char.is_numeric() {
+                let identifier = self.lex_identifier()?;
+                parsed_tokens.push(identifier);
+
+                continue;
+            }
+
+            if char == '@' {
+                let fn_call = self.lex_fn_call()?;
+                parsed_tokens.push(fn_call);
+
+                continue;
+            }
+
+            let symbol = self.lex_symbol(char)?;
+            parsed_tokens.push(symbol);
         }
 
-        self.tokens.to_owned()
+        Ok(parsed_tokens)
+    }
+
+    fn advance(&mut self) {
+        self.current_char = self.chars.next();
+    }
+
+    fn peek(&mut self) -> Option<char> {
+        self.chars.clone().next()
     }
 }
