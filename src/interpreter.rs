@@ -1,49 +1,249 @@
-use crate::{lexer::TokenTypes, parser::{ExprCondition, Expr, Literals, Node, NodeTypes, NodeVariable}};
-use std::iter::Peekable;
-use inline_colorization::*;
+use crate::parser::{Literals, Node};
+use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
 
 macro_rules! compare {
-    ($self:ident, $left_value:expr, $condition_type:expr, $right_value:expr) => {
-        match $condition_type {
-            TokenTypes::EqEq => Ok($self.compare($left_value, $right_value, |a, b| a == b)),
-            TokenTypes::NotEq => Ok($self.compare($left_value, $right_value, |a, b| a != b)),
-            TokenTypes::GThan => Ok($self.compare($left_value, $right_value, |a, b| a > b)),
-            TokenTypes::GThanEq => Ok($self.compare($left_value, $right_value, |a, b| a >= b)),
-            TokenTypes::LThan => Ok($self.compare($left_value, $right_value, |a, b| a < b)),
-            TokenTypes::LThanEq => Ok($self.compare($left_value, $right_value, |a, b| a <= b)),
+    ($left:expr, $condition:expr, $right:expr) => {
+        match $condition.as_str() {
+            "==" => $left == $right,
+            "!=" => $left != $right,
+            ">" => $left > $right,
+            ">=" => $left >= $right,
+            "<" => $left < $right,
+            "<=" => $left <= $right,
             _ => unreachable!()
         }
     };
 }
 
-pub struct Interpreter;
+#[derive(Debug)]
+pub enum ErrorTypes {
+    UnknownError,
+    TypeError,
+    UndefinedVar,
+    UndefinedFn,
+}
+
+#[derive(Debug)]
+pub struct InterpreterError {
+    pub r#type: ErrorTypes,
+    pub message: String
+}
+
+type InterpreterResult<T> = Result<T, InterpreterError>;
+
+#[derive(Debug, Clone)]
+enum Values {
+    Integer(i64),
+    String(String),
+    Boolean(bool),
+    Function {
+        args: Vec<Box<Node>>,
+        scope: Box<Node>
+    },
+    None,
+}
+
+impl Values {
+    fn is_none(&self) -> bool { matches!(self, Values::None) }
+}
+
+struct Env {
+    vars: HashMap<String, Values>,
+    parent: Option<Rc<RefCell<Env>>>
+}
+
+impl Env {
+    fn new(parent: Option<Rc<RefCell<Env>>>) -> Self {
+        Env {
+            vars: HashMap::new(),
+            parent
+        }
+    }
+
+    fn set(&mut self, name: &str, value: Values) {
+        self.vars.insert(name.to_string(), value);
+    }
+
+    fn get(&self, name: &str) -> InterpreterResult<Values> {
+        if let Some(value) = self.vars.get(name) {
+            return Ok(value.clone());
+        }
+
+        if let Some(ref parent) = self.parent {
+            return parent.borrow().get(name);
+        }
+
+        Err(InterpreterError {
+            r#type: ErrorTypes::UndefinedVar,
+            message: format!("Cannot find var: {:?}", name)
+        })
+    }
+}
+
+pub struct Interpreter {
+    env: Rc<RefCell<Env>>
+}
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            env: Rc::new(RefCell::new(Env::new(None)))
+        }
     }
 
-    fn handle_log(&self, nodes: Peekable<std::slice::Iter<Node>>, args: &Vec<Expr>, log_type: &str) -> Result<(), String> {
+    fn handle_fn(&mut self, identifier: &Box<Node>, args: &Vec<Box<Node>>, scope: &Box<Node>) -> InterpreterResult<Values> {
+        let name = match identifier.deref() {
+            Node::Identifier(identifier) => identifier,
+            _ => unreachable!()
+        };
+
+        let function = Values::Function {
+            args: args.clone(),
+            scope: scope.clone()
+        };
+
+        self.env.borrow_mut().set(name.as_str(), function);
+
+        Ok(Values::None)
+    }
+
+    fn handle_ret(&mut self, node: &Box<Node>) -> InterpreterResult<Values> {
+        let value = match node.deref() {
+            Node::Literal(literal) => match literal {
+                Literals::Int(integer) => Values::Integer(integer.clone()),
+                Literals::String(str) => Values::String(str.clone()),
+                Literals::Boolean(boolean) => Values::Boolean(boolean.clone()),
+            },
+            Node::Identifier(name) => self.env.borrow().get(name.as_str())?,
+            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
+            _ => unreachable!()
+        };
+
+        Ok(value)
+    }
+
+    fn handle_fn_call(&mut self, identifier: &Box<Node>, args: &Vec<Box<Node>>) -> InterpreterResult<Values> {
+        let name = match identifier.deref() {
+            Node::Identifier(identifier) => identifier,
+            _ => unreachable!()
+        };
+
+        let (fn_args, fn_scope) = match self.env.borrow().get(name.as_str()) {
+            Ok(Values::Function { args, scope, .. }) => (args, scope),
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::UndefinedFn,
+                message: format!("Cannot find function: {:?}", name)
+            })
+        };
+
+        if args.len() != fn_args.len() {
+            return Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Argument mismatch on function {:?}, Expected {} but found only {}", name, fn_args.len(), args.len())
+            });
+        }
+
+        let fn_env = Rc::new(RefCell::new(Env::new(None)));
+
+        for (fn_arg, arg) in fn_args.deref().into_iter().zip(args.deref().into_iter()) {
+            if let Node::Identifier(fn_arg) = fn_arg.deref() {
+                let val = match arg.deref() {
+                    Node::Literal(Literals::Int(integer)) => Values::Integer(integer.clone()),
+                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
+                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(boolean.clone()),
+                    Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str())?,
+                    Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::UnknownError,
+                        message: format!("Something went wrong while running handle_fn_call")
+                    })
+                };
+
+                fn_env.borrow_mut().set(fn_arg, val);
+            }
+        }
+
+        let prev_env = std::mem::replace(&mut self.env, fn_env);
+
+        if let Node::Scope { body } = fn_scope.deref() {
+            for scope_node in body {
+                let ret_value = self.exec_node(scope_node.deref())?;
+                if !ret_value.is_none() {
+                    return Ok(ret_value);
+                }
+            }
+        }
+
+        self.env = prev_env;
+
+        Ok(Values::None)
+    }
+
+    fn handle_scope(&mut self, body: &Vec<Box<Node>>) -> InterpreterResult<Values> {
+        let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
+        let prev_env = std::mem::replace(&mut self.env, new_env);
+
+        for scope_node in body {
+            self.exec_node(scope_node.deref())?;
+        }
+
+        self.env = prev_env;
+
+        Ok(Values::None)
+    }
+
+    fn handle_var(&mut self, identifier: &Box<Node>, value: &Box<Node>) -> InterpreterResult<Values> {
+        let name = match identifier.deref() {
+            Node::Identifier(identifier) => identifier,
+            _ => unreachable!()
+        };
+
+        let val = match value.deref() {
+            Node::Literal(Literals::Int(integer)) => Values::Integer(integer.clone()),
+            Node::Literal(Literals::String(str)) => Values::String(str.clone()),
+            Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(boolean.clone()),
+            Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str())?,
+            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Unknown Type on variable {:?}", name)
+            })
+        };
+
+        self.env.borrow_mut().set(name.as_str(), val);
+
+        Ok(Values::None)
+    }
+
+    fn handle_log(&mut self, log_type: &str, args: &Vec<Box<Node>>) -> InterpreterResult<Values> {
         let mut output = String::new();
 
         for arg in args {
-            match arg {
-                Expr::Literal(Literals::String(value)) => { output.push_str(value.as_str()); },
-                Expr::Literal(Literals::Int(value)) => { output.push_str(value.to_string().as_str()); },
-                Expr::Literal(Literals::Boolean(value)) => { output.push_str(value.to_string().as_str()); },
-                Expr::Identifier(name) => {
-                    let result = self.find_variable(nodes.clone(), name.to_string());
+            match arg.deref() {
+                Node::Literal(Literals::String(value)) => { output.push_str(value.as_str()); },
+                Node::Literal(Literals::Int(value)) => { output.push_str(value.to_string().as_str()); },
+                Node::Literal(Literals::Boolean(value)) => { output.push_str(value.to_string().as_str()); },
+                Node::Identifier(name) => {
+                    let value = self.env.borrow().get(name.as_str())?;
 
-                    match &result {
-                        Ok(variable) => match &variable.value {
-                            Expr::Literal(Literals::String(value)) => { output.push_str(value.as_str()); },
-                            Expr::Literal(Literals::Int(value)) => { output.push_str(value.to_string().as_str()); },
-                            Expr::Literal(Literals::Boolean(value)) => { output.push_str(value.to_string().as_str()); },
-                            _ => ()
-                        },
-                        Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", name))
+                    match value {
+                        Values::Integer(integer) => { output.push_str(integer.to_string().as_str()); },
+                        Values::String(str) => { output.push_str(str.as_str()); },
+                        Values::Boolean(boolean) => { output.push_str(boolean.to_string().as_str()); }
+                        _ => {}
+                    }
+                },
+                Node::FunctionCall { identifier, args } => {
+                    let ret_value = self.handle_fn_call(identifier, args)?;
+
+                    match ret_value {
+                        Values::Integer(integer) => { output.push_str(integer.to_string().as_str()); },
+                        Values::String(str) => { output.push_str(str.as_str()); },
+                        Values::Boolean(boolean) => { output.push_str(boolean.to_string().as_str()); }
+                        _ => {}
                     }
                 }
+                _ => ()
             }
         }
 
@@ -53,242 +253,158 @@ impl Interpreter {
             _ => ()
         }
 
-        Ok(())
+        Ok(Values::None)
     }
 
-    fn handle_check(&self, ast: &Vec<Node>, condition_node: &ExprCondition, mut childrens: Peekable<std::slice::Iter<Node>>) -> Result<(), String> {
-        match self.handle_condition(ast, &condition_node.left, &condition_node.condition_type, &condition_node.right) {
-            Ok(result) => {
-                if result {
-                    while let Some(curr_node) = childrens.next() {
-                        if let Err(err) = self.execute_node(ast, curr_node) {
-                            return Err(err);
-                        }
-                    }
+    fn handle_check(&mut self, condition: &Box<Node>, scope: &Box<Node>) -> InterpreterResult<Values> {
+        let condition = match condition.deref() {
+            Node::Condition { left, condition, right } => {
+                let left_value = match left.deref() {
+                    Node::Literal(Literals::Int(integer)) => Values::Integer(*integer),
+                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
+                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(*boolean),
+                    Node::Identifier(identifier) => self.env.borrow().get(identifier)?,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Unknown type on the left side of the condition")
+                    })
+                };
+
+                let right_value = match right.deref() {
+                    Node::Literal(Literals::Int(integer)) => Values::Integer(*integer),
+                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
+                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(*boolean),
+                    Node::Identifier(identifier) => self.env.borrow().get(identifier)?,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Unknown type on the right side of the condition")
+                    })
+                };
+
+                match (left_value, right_value) {
+                    (Values::Integer(left_int), Values::Integer(right_int)) => compare!(left_int, condition, right_int),
+                    (Values::String(left_str), Values::String(right_str)) => compare!(left_str, condition, right_str),
+                    (Values::Boolean(left_boolean), Values::Boolean(right_boolean)) => compare!(left_boolean, condition, right_boolean),
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot compare {:?} to {:?}", left, right)
+                    })
                 }
             },
-            Err(err) => return Err(err)
-        }
+            Node::Literal(literal) => match literal {
+                Literals::Int(integer) => *integer > 0,
+                Literals::String(str) => str.len() > 0,
+                Literals::Boolean(boolean) => *boolean
+            },
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::UnknownError,
+                message: format!("Something went wrong in handle_check")
+            })
+        };
 
-        Ok(())
-    }
+        let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
+        let prev_env = std::mem::replace(&mut self.env, new_env);
 
-    fn handle_while(&self, ast: &Vec<Node>, condition_node: &ExprCondition, childrens: &Vec<Node>) -> Result<(), String> {
-        loop {
-            let mut childrens = childrens.iter().peekable();
-
-            match self.handle_condition(ast, &condition_node.left, &condition_node.condition_type, &condition_node.right) {
-                Ok(result) => {
-                    if !result { break; }
-
-                    while let Some(curr_node) = childrens.next() {
-                        if let Err(err) = self.execute_node(ast, curr_node) {
-                            return Err(err);
-                        }
+        if condition {
+            if let Node::Scope { body } = scope.deref() {
+                for scope_node in body {
+                    let ret_value = self.exec_node(scope_node.deref())?;
+                    if !ret_value.is_none() {
+                        return Ok(ret_value);
                     }
-                },
-                Err(err) => return Err(err)
+                }
             }
         }
 
-        Ok(())
+        self.env = prev_env;
+
+        Ok(Values::None)
     }
 
-    fn handle_condition(&self, ast: &Vec<Node>, left: &Expr, condition_type: &TokenTypes, right: &Expr) -> Result<bool, String> {
-        match (left, right) {
-            (Expr::Literal(Literals::Int(left_value)), Expr::Literal(Literals::Int(right_value))) => {
-                compare!(self, left_value, condition_type, right_value)
-            },
-            (Expr::Identifier(left_name), Expr::Literal(Literals::Int(right_value))) => {
-                let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
+    fn handle_while(&mut self, condition: &Box<Node>, scope: &Box<Node>) -> InterpreterResult<Values> {
+        let condition = match condition.deref() {
+            Node::Condition { left, condition, right } => {
+                let left_value = match left.deref() {
+                    Node::Literal(Literals::Int(integer)) => Values::Integer(*integer),
+                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
+                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(*boolean),
+                    Node::Identifier(identifier) => self.env.borrow().get(identifier)?,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Unknown type on the left side of the condition")
+                    })
+                };
 
-                match &left_result {
-                    Ok(left_variable) => match &left_variable.value {
-                        Expr::Literal(Literals::Int(left_value)) => {
-                            compare!(self, left_value, condition_type, right_value)
-                        },
-                        Expr::Literal(Literals::String(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_value)),
-                        Expr::Literal(Literals::Boolean(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_value)),
-                        _ => unreachable!()
-                    },
-                    Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name))
+                let right_value = match right.deref() {
+                    Node::Literal(Literals::Int(integer)) => Values::Integer(*integer),
+                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
+                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(*boolean),
+                    Node::Identifier(identifier) => self.env.borrow().get(identifier)?,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Unknown type on the right side of the condition")
+                    })
+                };
+
+                match (left_value, right_value) {
+                    (Values::Integer(left_int), Values::Integer(right_int)) => compare!(left_int, condition, right_int),
+                    (Values::String(left_str), Values::String(right_str)) => compare!(left_str, condition, right_str),
+                    (Values::Boolean(left_boolean), Values::Boolean(right_boolean)) => compare!(left_boolean, condition, right_boolean),
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot compare {:?} to {:?}", left, right)
+                    })
                 }
             },
-            (Expr::Literal(Literals::Int(left_value)), Expr::Identifier(right_name)) => {
-                let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
+            Node::Literal(literal) => match literal {
+                Literals::Int(integer) => *integer > 0,
+                Literals::String(str) => str.len() > 0,
+                Literals::Boolean(boolean) => *boolean
+            },
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::UnknownError,
+                message: format!("Something went wrong in handle_while")
+            })
+        };
 
-                match &right_result {
-                    Ok(right_variable) => match &right_variable.value {
-                        Expr::Literal(Literals::Int(right_value)) => {
-                            compare!(self, left_value, condition_type, right_value)
-                        },
-                        Expr::Literal(Literals::String(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_name)),
-                        Expr::Literal(Literals::Boolean(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_name)),
-                        _ => unreachable!()
-                    },
-                    Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
-                }
-            },
-            (Expr::Literal(Literals::String(left_value)), Expr::Literal(Literals::String(right_value))) => {
-                compare!(self, left_value, condition_type, right_value)
-            },
-            (Expr::Identifier(left_name), Expr::Literal(Literals::String(right_value))) => {
-                let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
+        let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
+        let prev_env = std::mem::replace(&mut self.env, new_env);
 
-                match &left_result {
-                    Ok(left_variable) => match &left_variable.value {
-                        Expr::Literal(Literals::String(left_value)) => {
-                            compare!(self, left_value, condition_type, right_value)
-                        },
-                        Expr::Literal(Literals::Int(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to string: \"{}\".", left_value, right_value)),
-                        Expr::Literal(Literals::Boolean(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to string: \"{}\".", left_value, right_value)),
-                        _ => unreachable!()
-                    },
-                    Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name))
+        while condition {
+            if let Node::Scope { body } = scope.deref() {
+                for scope_node in body {
+                    let ret_value = self.exec_node(scope_node.deref())?;
+                    if !ret_value.is_none() {
+                        return Ok(ret_value);
+                    }
                 }
-            },
-            (Expr::Literal(Literals::String(left_value)), Expr::Identifier(right_name)) => {
-                let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
-
-                match &right_result {
-                    Ok(right_variable) => match &right_variable.value {
-                        Expr::Literal(Literals::String(right_value)) => {
-                            compare!(self, left_value, condition_type, right_value)
-                        },
-                        Expr::Literal(Literals::Int(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_value)),
-                        Expr::Literal(Literals::Boolean(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to boolean: {}.", left_value, right_value)),
-                        _ => unreachable!()
-                    },
-                    Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
-                }
-            },
-            (Expr::Literal(Literals::Boolean(left_value)), Expr::Literal(Literals::Boolean(right_value))) => {
-                compare!(self, left_value, condition_type, right_value)
-            },
-            (Expr::Identifier(left_name), Expr::Literal(Literals::Boolean(right_value))) => {
-                let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
-
-                match &left_result {
-                    Ok(left_variable) => match &left_variable.value {
-                        Expr::Literal(Literals::Boolean(left_value)) => {
-                            compare!(self, left_value, condition_type, right_value)
-                        },
-                        Expr::Literal(Literals::Int(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to boolean: {}.", left_value, right_value)),
-                        Expr::Literal(Literals::String(left_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to boolean: {}.", left_value, right_value)),
-                        _ => unreachable!()
-                    },
-                    Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name))
-                }
-            },
-            (Expr::Literal(Literals::Boolean(left_value)), Expr::Identifier(right_name)) => {
-                let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
-
-                match &right_result {
-                    Ok(right_variable) => match &right_variable.value {
-                        Expr::Literal(Literals::Boolean(right_value)) => {
-                            compare!(self, left_value, condition_type, right_value)
-                        },
-                        Expr::Literal(Literals::Int(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_value)),
-                        Expr::Literal(Literals::String(right_value)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to string: \"{}\".", left_value, right_value)),
-                        _ => unreachable!()
-                    },
-                    Err(_) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
-                }
-            },
-            (Expr::Identifier(left_name), Expr::Identifier(right_name)) => {
-                let left_result = self.find_variable(ast.iter().peekable(), left_name.to_string());
-                let right_result = self.find_variable(ast.iter().peekable(), right_name.to_string());
-
-                match (&left_result, &right_result) {
-                    (Ok(left_variable), Ok(right_variable)) => {
-                        match (&left_variable.value, &right_variable.value) {
-                            (Expr::Literal(Literals::Int(left_value)), Expr::Literal(Literals::Int(right_value))) => {
-                                compare!(self, left_value, condition_type, right_value)
-                            },
-                            (Expr::Literal(Literals::String(left_value)), Expr::Literal(Literals::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int: {}.", left_value, right_value)),
-                            (Expr::Literal(Literals::Int(left_value)), Expr::Literal(Literals::String(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to string: \"{}\".", left_value, right_value)),
-                            (Expr::Literal(Literals::Boolean(left_value)), Expr::Literal(Literals::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int: {}.", left_value, right_value)),
-                            (Expr::Literal(Literals::Int(left_value)), Expr::Literal(Literals::Boolean(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to boolean: {}.", left_value, right_value)),
-                            _ => unreachable!()
-                        }
-                    },
-                    (Err(_), _) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", left_name)),
-                    (_, Err(_)) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Unknown variable: '{}'.", right_name))
-                }
-            },
-            (Expr::Literal(Literals::Int(left_value)), Expr::Literal(Literals::String(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to string \"{}\".", left_value, right_value)),
-            (Expr::Literal(Literals::Int(left_value)), Expr::Literal(Literals::Boolean(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare int: {} to boolean {}.", left_value, right_value)),
-            (Expr::Literal(Literals::String(left_value)), Expr::Literal(Literals::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to int {}.", left_value, right_value)),
-            (Expr::Literal(Literals::String(left_value)), Expr::Literal(Literals::Boolean(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare string: \"{}\" to boolean {}.", left_value, right_value)),
-            (Expr::Literal(Literals::Boolean(left_value)), Expr::Literal(Literals::Int(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to int {}.", left_value, right_value)),
-            (Expr::Literal(Literals::Boolean(left_value)), Expr::Literal(Literals::String(right_value))) => return Err(format!("{color_red}[ERROR]{color_reset} -> Runtime Error: Cannot compare boolean: {} to string \"{}\".", left_value, right_value))
-        }
-    }
-
-    fn execute_node(&self, ast: &Vec<Node>, node: &Node) -> Result<(), String> {
-        match &node.r#type {
-            NodeTypes::Log(args) => {
-                if let Err(err) = self.handle_log(ast.iter().peekable(), args, "log") {
-                    return Err(err);
-                }
-            },
-            NodeTypes::Logl(args) => {
-                if let Err(err) = self.handle_log(ast.iter().peekable(), args, "logl") {
-                    return Err(err);
-                }
-            },
-            NodeTypes::Check(condition_node, children) => {
-                if let Err(err) = self.handle_check(ast, condition_node, children.iter().peekable()) {
-                    return Err(err);
-                }
-            },
-            NodeTypes::While(condition_node, children) => {
-                if let Err(err) = self.handle_while(ast, condition_node, children) {
-                    return Err(err);
-                }
-            },
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    pub fn run(&self, ast: Vec<Node>) -> Result<(), String> {
-        let mut nodes = ast.iter().peekable();
-
-        while let Some(node) = nodes.next() {
-            if let Err(err) = self.execute_node(&ast, node) {
-                return Err(err);
             }
         }
 
-        Ok(())
+        self.env = prev_env;
+
+        Ok(Values::None)
     }
 
-    fn compare<T, F>(&self, a: T, b: T, f: F) -> bool
-    where
-        F: Fn(T, T) -> bool
-    {
-        f(a, b)
+    fn exec_node(&mut self, node: &Node) -> InterpreterResult<Values> {
+        match node {
+            Node::Function { identifier, args, scope } => self.handle_fn(identifier, args, scope),
+            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args),
+            Node::Return(value) => self.handle_ret(value),
+            Node::Scope { body } => self.handle_scope(body),
+            Node::Var { identifier, value } => self.handle_var(identifier, value),
+            Node::Check { condition, scope } => self.handle_check(condition, scope),
+            Node::While { condition, scope } => self.handle_while(condition, scope),
+            Node::Log { r#type, args } => self.handle_log(r#type.as_str(), args),
+            _ => Ok(Values::None)
+        }
     }
 
-    fn find_variable(&self, mut nodes: Peekable<std::slice::Iter<Node>>, name: String) -> Result<NodeVariable, ()> {
-        while let Some(node) = nodes.next() {
-            match &node.r#type {
-                NodeTypes::Variable(variable) => {
-                    if variable.name == name {
-                        return Ok(variable.clone());
-                    }
-                },
-                NodeTypes::Check(_, children) => {
-                    if let Ok(variable) = self.find_variable(children.iter().peekable(), name.clone()) {
-                        return Ok(variable);
-                    }
-                },
-                _ => {}
-            }
+    pub fn run(&mut self, ast: &Vec<Node>) -> InterpreterResult<()> {
+        for node in ast {
+            self.exec_node(node)?;
         }
 
-        Err(())
+        Ok(())
     }
 }

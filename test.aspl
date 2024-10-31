@@ -1,10 +1,11 @@
-set foo 1
-logl 123 "hello" true false 1 foo
-
-check true {
-  logl "check"
+fn my_fn a {
+  logl a
 }
 
-while "foo" {
-  logl "while"
+set a 10
+set b a
+
+while a >= b {
+  set c "You correcto"
+  @my_fn c
 }
