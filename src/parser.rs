@@ -115,6 +115,10 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                     let var = self.parse_identifier()?;
                     args.push(Box::new(var));
                 },
+                TokenTypes::FnCall => {
+                    let fn_call = self.parse_function_call()?;
+                    args.push(Box::new(fn_call));
+                },
                 _ => break
             }
         }
