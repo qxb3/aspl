@@ -116,7 +116,10 @@ impl Interpreter {
             },
             Node::Identifier(name) => self.env.borrow().get(name.as_str())?,
             Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
-            _ => unreachable!()
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::UnknownError,
+                message: format!("Something went wrong while running handle_ret")
+            })
         };
 
         Ok(value)
