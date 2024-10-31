@@ -242,13 +242,25 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
 
     pub fn lex(&mut self) -> LexerResult<Vec<Token>> {
         let mut parsed_tokens: Vec<Token> = vec![];
+        let mut comment = false;
 
         while let Some(char) = self.current_char {
+            if char == '#' {
+                comment = true;
+            }
+
             if char == '\n' {
+                comment = false;
+
                 self.line += 1;
                 self.col = 1;
                 self.advance();
 
+                continue;
+            }
+
+            if comment {
+                self.advance();
                 continue;
             }
 
