@@ -91,6 +91,20 @@ impl Interpreter {
         }
     }
 
+    fn handle_value(&mut self, node: &Node) -> InterpreterResult<Values> {
+        match node {
+            Node::Literal(Literals::Int(integer)) => Ok(Values::Integer(integer.clone())),
+            Node::Literal(Literals::String(str)) => Ok(Values::String(str.clone())),
+            Node::Literal(Literals::Boolean(boolean)) => Ok(Values::Boolean(boolean.clone())),
+            Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str()),
+            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args),
+            _ => Err(InterpreterError {
+                r#type: ErrorTypes::UnknownError,
+                message: format!("Something went wrong while handling value")
+            })
+        }
+    }
+
     fn handle_fn(&mut self, identifier: &Box<Node>, args: &Vec<Box<Node>>, scope: &Box<Node>) -> InterpreterResult<Values> {
         let name = match identifier.deref() {
             Node::Identifier(identifier) => identifier,
@@ -108,20 +122,7 @@ impl Interpreter {
     }
 
     fn handle_ret(&mut self, node: &Box<Node>) -> InterpreterResult<Values> {
-        let value = match node.deref() {
-            Node::Literal(literal) => match literal {
-                Literals::Int(integer) => Values::Integer(integer.clone()),
-                Literals::String(str) => Values::String(str.clone()),
-                Literals::Boolean(boolean) => Values::Boolean(boolean.clone()),
-            },
-            Node::Identifier(name) => self.env.borrow().get(name.as_str())?,
-            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
-            _ => return Err(InterpreterError {
-                r#type: ErrorTypes::UnknownError,
-                message: format!("Something went wrong while running handle_ret")
-            })
-        };
-
+        let value = self.handle_value(node.deref())?;
         Ok(value)
     }
 
@@ -150,18 +151,7 @@ impl Interpreter {
 
         for (fn_arg, arg) in fn_args.deref().into_iter().zip(args.deref().into_iter()) {
             if let Node::Identifier(fn_arg) = fn_arg.deref() {
-                let val = match arg.deref() {
-                    Node::Literal(Literals::Int(integer)) => Values::Integer(integer.clone()),
-                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
-                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(boolean.clone()),
-                    Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str())?,
-                    Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
-                    _ => return Err(InterpreterError {
-                        r#type: ErrorTypes::UnknownError,
-                        message: format!("Something went wrong while running handle_fn_call")
-                    })
-                };
-
+                let val = self.handle_value(arg.deref())?;
                 fn_env.borrow_mut().set(fn_arg, val);
             }
         }
@@ -201,18 +191,7 @@ impl Interpreter {
             _ => unreachable!()
         };
 
-        let val = match value.deref() {
-            Node::Literal(Literals::Int(integer)) => Values::Integer(integer.clone()),
-            Node::Literal(Literals::String(str)) => Values::String(str.clone()),
-            Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(boolean.clone()),
-            Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str())?,
-            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
-            _ => return Err(InterpreterError {
-                r#type: ErrorTypes::TypeError,
-                message: format!("Unknown Type on variable {:?}", name)
-            })
-        };
-
+        let val = self.handle_value(value.deref())?;
         self.env.borrow_mut().set(name.as_str(), val);
 
         Ok(Values::None)
@@ -224,18 +203,8 @@ impl Interpreter {
             _ => unreachable!()
         };
 
-        let val = match value.deref() {
-            Node::Literal(Literals::Int(integer)) => Values::Integer(integer.clone()),
-            Node::Literal(Literals::String(str)) => Values::String(str.clone()),
-            Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(boolean.clone()),
-            Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str())?,
-            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args)?,
-            _ => return Err(InterpreterError {
-                r#type: ErrorTypes::TypeError,
-                message: format!("Unknown Type on variable {:?}", name)
-            })
-        };
-
+        // TODO: Bug
+        let val = self.handle_value(value.deref())?;
         self.env.borrow_mut().set(name.as_str(), val);
 
         Ok(Values::None)
@@ -245,37 +214,21 @@ impl Interpreter {
         let mut output = String::new();
 
         for arg in args {
-            match arg.deref() {
-                Node::Literal(Literals::String(value)) => { output.push_str(value.as_str()); },
-                Node::Literal(Literals::Int(value)) => { output.push_str(value.to_string().as_str()); },
-                Node::Literal(Literals::Boolean(value)) => { output.push_str(value.to_string().as_str()); },
-                Node::Identifier(name) => {
-                    let value = self.env.borrow().get(name.as_str())?;
-
-                    match value {
-                        Values::Integer(integer) => { output.push_str(integer.to_string().as_str()); },
-                        Values::String(str) => { output.push_str(str.as_str()); },
-                        Values::Boolean(boolean) => { output.push_str(boolean.to_string().as_str()); }
-                        _ => {}
-                    }
-                },
-                Node::FunctionCall { identifier, args } => {
-                    let ret_value = self.handle_fn_call(identifier, args)?;
-
-                    match ret_value {
-                        Values::Integer(integer) => { output.push_str(integer.to_string().as_str()); },
-                        Values::String(str) => { output.push_str(str.as_str()); },
-                        Values::Boolean(boolean) => { output.push_str(boolean.to_string().as_str()); }
-                        _ => {}
-                    }
-                }
-                _ => ()
+            let value = self.handle_value(arg.deref())?;
+            match value {
+                Values::Integer(integer) => output.push_str(integer.to_string().as_str()),
+                Values::String(str) => output.push_str(str.as_str()),
+                Values::Boolean(boolean) => output.push_str(boolean.to_string().as_str()),
+                _ => return Err(InterpreterError {
+                    r#type: ErrorTypes::UnknownError,
+                    message: format!("Something went wrong while handling log args")
+                })
             }
         }
 
         match log_type {
-            "log" => { print!("{output}"); },
-            "logl" => { println!("{output}"); }
+            "log" => print!("{output}"),
+            "logl" => println!("{output}"),
             _ => ()
         }
 
@@ -285,27 +238,8 @@ impl Interpreter {
     fn handle_check(&mut self, condition: &Box<Node>, scope: &Box<Node>) -> InterpreterResult<Values> {
         let condition = match condition.deref() {
             Node::Condition { left, condition, right } => {
-                let left_value = match left.deref() {
-                    Node::Literal(Literals::Int(integer)) => Values::Integer(*integer),
-                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
-                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(*boolean),
-                    Node::Identifier(identifier) => self.env.borrow().get(identifier)?,
-                    _ => return Err(InterpreterError {
-                        r#type: ErrorTypes::TypeError,
-                        message: format!("Unknown type on the left side of the condition")
-                    })
-                };
-
-                let right_value = match right.deref() {
-                    Node::Literal(Literals::Int(integer)) => Values::Integer(*integer),
-                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
-                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(*boolean),
-                    Node::Identifier(identifier) => self.env.borrow().get(identifier)?,
-                    _ => return Err(InterpreterError {
-                        r#type: ErrorTypes::TypeError,
-                        message: format!("Unknown type on the right side of the condition")
-                    })
-                };
+                let left_value = self.handle_value(left.deref())?;
+                let right_value = self.handle_value(right.deref())?;
 
                 match (left_value, right_value) {
                     (Values::Integer(left_int), Values::Integer(right_int)) => compare!(left_int, condition, right_int),
@@ -350,27 +284,8 @@ impl Interpreter {
     fn handle_while(&mut self, condition: &Box<Node>, scope: &Box<Node>) -> InterpreterResult<Values> {
         let condition = match condition.deref() {
             Node::Condition { left, condition, right } => {
-                let left_value = match left.deref() {
-                    Node::Literal(Literals::Int(integer)) => Values::Integer(*integer),
-                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
-                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(*boolean),
-                    Node::Identifier(identifier) => self.env.borrow().get(identifier)?,
-                    _ => return Err(InterpreterError {
-                        r#type: ErrorTypes::TypeError,
-                        message: format!("Unknown type on the left side of the condition")
-                    })
-                };
-
-                let right_value = match right.deref() {
-                    Node::Literal(Literals::Int(integer)) => Values::Integer(*integer),
-                    Node::Literal(Literals::String(str)) => Values::String(str.clone()),
-                    Node::Literal(Literals::Boolean(boolean)) => Values::Boolean(*boolean),
-                    Node::Identifier(identifier) => self.env.borrow().get(identifier)?,
-                    _ => return Err(InterpreterError {
-                        r#type: ErrorTypes::TypeError,
-                        message: format!("Unknown type on the right side of the condition")
-                    })
-                };
+                let left_value = self.handle_value(left.deref())?;
+                let right_value = self.handle_value(right.deref())?;
 
                 match (left_value, right_value) {
                     (Values::Integer(left_int), Values::Integer(right_int)) => compare!(left_int, condition, right_int),
