@@ -1,5 +1,5 @@
 use crate::parser::{Literals, Node};
-use std::{cell::RefCell, collections::HashMap, ops::Deref, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, mem::discriminant, ops::Deref, rc::Rc};
 
 macro_rules! compare {
     ($left:expr, $condition:expr, $right:expr) => {
@@ -31,16 +31,29 @@ pub struct InterpreterError {
 
 type InterpreterResult<T> = Result<T, InterpreterError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Values {
     Integer(i64),
     String(String),
     Boolean(bool),
     Function {
+        identifier: String,
         args: Vec<Box<Node>>,
         scope: Box<Node>
     },
     None,
+}
+
+impl Values {
+    fn name(&self) -> String {
+        match self {
+            Values::Integer(integer) => integer.to_string(),
+            Values::String(str) => format!("{:?}", str),
+            Values::Boolean(boolean) => boolean.to_string(),
+            Values::Function { identifier, .. } => identifier.to_string(),
+            Values::None => "None".to_string()
+        }
+    }
 }
 
 impl Values {
@@ -106,17 +119,18 @@ impl Interpreter {
     }
 
     fn handle_fn(&mut self, identifier: &Box<Node>, args: &Vec<Box<Node>>, scope: &Box<Node>) -> InterpreterResult<Values> {
-        let name = match identifier.deref() {
+        let identifier = match identifier.deref() {
             Node::Identifier(identifier) => identifier,
             _ => unreachable!()
         };
 
         let function = Values::Function {
+            identifier: identifier.to_string(),
             args: args.clone(),
             scope: scope.clone()
         };
 
-        self.env.borrow_mut().set(name.as_str(), function);
+        self.env.borrow_mut().set(identifier.as_str(), function);
 
         Ok(Values::None)
     }
@@ -203,8 +217,20 @@ impl Interpreter {
             _ => unreachable!()
         };
 
-        // TODO: Bug
         let val = self.handle_value(value.deref())?;
+
+        match self.env.borrow().get(name.as_str()) {
+            Ok(variable) => {
+                if discriminant(&val) != discriminant(&variable) {
+                    return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot update variable with different type: {:?} -> {:?}", val.name(), variable.name())
+                    })
+                }
+            },
+            Err(err) => return Err(err)
+        }
+
         self.env.borrow_mut().set(name.as_str(), val);
 
         Ok(Values::None)
