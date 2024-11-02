@@ -10,10 +10,14 @@ use parser::Parser;
 
 fn main() {
     let source_file = match env::args().nth(1) {
+        Some(source_file) if !source_file.ends_with(".aspl") => {
+            println!("{color_red}[ERROR]{color_reset} -> Invalid extension.");
+            exit(1);
+        },
         Some(source_file) => source_file,
         None => {
-            println!("Error: Specify the aspl file:");
-            println!("$ aspl <input.aspl>");
+            println!("{color_red}[ERROR]{color_reset} -> Specify the aspl file:");
+            println!("{color_green}[USAGE]{color_reset} -> $ aspl <input.aspl>");
             exit(1);
         }
     };
@@ -21,7 +25,7 @@ fn main() {
     let source = match fs::read_to_string(&source_file) {
         Ok(contents) => contents,
         Err(_) => {
-            println!("Cannot read file: {source_file}");
+            println!("{color_red}[ERROR]{color_reset} -> Cannot read file: {source_file}");
             exit(1);
         }
     };
