@@ -1,10 +1,13 @@
+use std::mem::discriminant;
+
 use crate::lexer::{Token, TokenTypes};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Literals {
     String(String),
     Int(i64),
-    Boolean(bool)
+    Boolean(bool),
+    Array(Vec<Literals>)
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -84,16 +87,10 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         let value = match &self.current_token.clone() {
             Some(node) => {
-                if node.r#type.is_literal() {
-                    self.advance();
-                }
-
-                match node.r#type {
-                    TokenTypes::IntLiteral => Node::Literal(Literals::Int(node.value.clone().unwrap().parse().unwrap())),
-                    TokenTypes::StringLiteral => Node::Literal(Literals::String(node.value.clone().unwrap().parse().unwrap())),
-                    TokenTypes::BooleanLiteral => Node::Literal(Literals::Boolean(node.value.clone().unwrap().parse().unwrap())),
-                    TokenTypes::Identifier => self.parse_identifier()?,
-                    TokenTypes::FnCall => self.parse_function_call()?,
+                match node {
+                    node if node.r#type.is_literal() || node.r#type.is_open_bracket() => self.parse_literal()?,
+                    node if node.r#type.is_identifier() => self.parse_identifier()?,
+                    node if node.r#type.is_fn_call() => self.parse_function_call()?,
                     _ => return Err(ParserError {
                         message: format!("Expected a literal/identifier/function call, but found {:?}", node.r#type),
                         token: Some(node.clone())
@@ -119,16 +116,10 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         let value = match &self.current_token.clone() {
             Some(node) => {
-                if node.r#type.is_literal() {
-                    self.advance();
-                }
-
-                match node.r#type {
-                    TokenTypes::IntLiteral => Node::Literal(Literals::Int(node.value.clone().unwrap().parse().unwrap())),
-                    TokenTypes::StringLiteral => Node::Literal(Literals::String(node.value.clone().unwrap().parse().unwrap())),
-                    TokenTypes::BooleanLiteral => Node::Literal(Literals::Boolean(node.value.clone().unwrap().parse().unwrap())),
-                    TokenTypes::Identifier => self.parse_identifier()?,
-                    TokenTypes::FnCall => self.parse_function_call()?,
+                match node {
+                    node if node.r#type.is_literal() || node.r#type.is_open_bracket() => self.parse_literal()?,
+                    node if node.r#type.is_identifier() => self.parse_identifier()?,
+                    node if node.r#type.is_fn_call() => self.parse_function_call()?,
                     _ => return Err(ParserError {
                         message: format!("Expected a literal/identifier/function call, but found {:?}", node.r#type),
                         token: Some(node.clone())
@@ -154,20 +145,9 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         while let Some(arg) = &self.current_token {
             match arg.r#type {
-                TokenTypes::IntLiteral |
-                TokenTypes::StringLiteral |
-                TokenTypes::BooleanLiteral => {
-                    let literal = self.parse_literal()?;
-                    args.push(Box::new(literal));
-                },
-                TokenTypes::Identifier => {
-                    let var = self.parse_identifier()?;
-                    args.push(Box::new(var));
-                },
-                TokenTypes::FnCall => {
-                    let fn_call = self.parse_function_call()?;
-                    args.push(Box::new(fn_call));
-                },
+                arg if arg.is_literal() || arg.is_open_bracket() => args.push(Box::new(self.parse_literal()?)),
+                arg if arg.is_identifier() => args.push(Box::new(self.parse_identifier()?)),
+                arg if arg.is_fn_call() => args.push(Box::new(self.parse_function_call()?)),
                 _ => break
             }
         }
@@ -238,7 +218,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 }
             }
 
-            if token.r#type.is_literal() {
+            if token.r#type.is_literal() || token.r#type.is_open_bracket() {
                 let literal = self.parse_literal()?;
                 let scope = self.parse_scope()?;
 
@@ -289,7 +269,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         self.advance();
 
         if let Some(token) = &self.current_token {
-            if token.r#type.is_literal() {
+            if token.r#type.is_literal() || token.r#type.is_open_bracket() {
                 let ret_identifier = self.parse_literal()?;
                 return Ok(Node::Return(
                     Box::new(ret_identifier)
@@ -350,11 +330,45 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
     }
 
     fn parse_literal(&mut self) -> ParserResult<Node> {
-        if let Some(token) = &self.current_token {
+        if let Some(token) = &self.current_token.clone() {
             let value: Option<Literals> = match token.r#type {
                 TokenTypes::IntLiteral => Some(Literals::Int(token.value.clone().unwrap().parse().unwrap())),
                 TokenTypes::StringLiteral => Some(Literals::String(token.value.clone().unwrap().parse().unwrap())),
                 TokenTypes::BooleanLiteral => Some(Literals::Boolean(token.value.clone().unwrap().parse().unwrap())),
+                TokenTypes::OpenBracket => {
+                    self.advance();
+
+                    let mut values: Vec<Literals> = vec![];
+
+                    while let Some(token) = &self.current_token.clone() {
+                        if token.r#type.is_close_bracket() {
+                            self.advance();
+                            break;
+                        }
+
+                        let value: Literals = match token.r#type {
+                            TokenTypes::IntLiteral => Literals::Int(token.value.clone().unwrap().parse().unwrap()),
+                            TokenTypes::StringLiteral => Literals::String(token.value.clone().unwrap().parse().unwrap()),
+                            TokenTypes::BooleanLiteral => Literals::Boolean(token.value.clone().unwrap().parse().unwrap()),
+                            _ => return Err(ParserError {
+                                message: format!("Expected a literal, but found {:?}", token.r#type),
+                                token: Some(token.clone())
+                            })
+                        };
+
+                        values.push(value);
+                        self.advance();
+                    }
+
+                    if !values.iter().all(|value| discriminant(value) == discriminant(&values[0])) {
+                        return Err(ParserError {
+                            message: format!("Cannot have two or more types in array"),
+                            token: Some(token.clone())
+                        })
+                    }
+
+                    Some(Literals::Array(values))
+                },
                 _ => None
             };
 
@@ -365,7 +379,6 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 });
             }
 
-            self.advance();
             return Ok(Node::Literal(value.unwrap()))
         }
 
@@ -522,7 +535,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             }
 
             // Check & Parse Literal
-            if token.r#type.is_literal() {
+            if token.r#type.is_literal() || token.r#type.is_open_bracket() {
                 return self.parse_literal();
             }
 

@@ -36,6 +36,7 @@ enum Values {
     Integer(i64),
     String(String),
     Boolean(bool),
+    Array(Vec<Values>),
     Function {
         identifier: String,
         args: Vec<Box<Node>>,
@@ -45,19 +46,18 @@ enum Values {
 }
 
 impl Values {
+    fn is_none(&self) -> bool { matches!(self, Values::None) }
+
     fn name(&self) -> String {
         match self {
             Values::Integer(integer) => integer.to_string(),
             Values::String(str) => format!("{:?}", str),
             Values::Boolean(boolean) => boolean.to_string(),
+            Values::Array(values) => format!("{:?}", values),
             Values::Function { identifier, .. } => identifier.to_string(),
             Values::None => "None".to_string()
         }
     }
-}
-
-impl Values {
-    fn is_none(&self) -> bool { matches!(self, Values::None) }
 }
 
 struct Env {
@@ -101,20 +101,6 @@ impl Interpreter {
     pub fn new() -> Self {
         Self {
             env: Rc::new(RefCell::new(Env::new(None)))
-        }
-    }
-
-    fn handle_value(&mut self, node: &Node) -> InterpreterResult<Values> {
-        match node {
-            Node::Literal(Literals::Int(integer)) => Ok(Values::Integer(integer.clone())),
-            Node::Literal(Literals::String(str)) => Ok(Values::String(str.clone())),
-            Node::Literal(Literals::Boolean(boolean)) => Ok(Values::Boolean(boolean.clone())),
-            Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str()),
-            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args),
-            _ => Err(InterpreterError {
-                r#type: ErrorTypes::UnknownError,
-                message: format!("Something went wrong while handling value")
-            })
         }
     }
 
@@ -241,10 +227,12 @@ impl Interpreter {
 
         for arg in args {
             let value = self.handle_value(arg.deref())?;
+
             match value {
                 Values::Integer(integer) => output.push_str(integer.to_string().as_str()),
                 Values::String(str) => output.push_str(str.as_str()),
                 Values::Boolean(boolean) => output.push_str(boolean.to_string().as_str()),
+                Values::Array(values) => output.push_str((values.iter().map(|value| value.name()).collect::<Vec<String>>()).join(" ").as_str()),
                 _ => return Err(InterpreterError {
                     r#type: ErrorTypes::UnknownError,
                     message: format!("Something went wrong while handling log args")
@@ -280,7 +268,8 @@ impl Interpreter {
             Node::Literal(literal) => match literal {
                 Literals::Int(integer) => *integer > 0,
                 Literals::String(str) => str.len() > 0,
-                Literals::Boolean(boolean) => *boolean
+                Literals::Boolean(boolean) => *boolean,
+                Literals::Array(values) => values.len() > 0,
             },
             _ => return Err(InterpreterError {
                 r#type: ErrorTypes::UnknownError,
@@ -326,7 +315,8 @@ impl Interpreter {
             Node::Literal(literal) => match literal {
                 Literals::Int(integer) => *integer > 0,
                 Literals::String(str) => str.len() > 0,
-                Literals::Boolean(boolean) => *boolean
+                Literals::Boolean(boolean) => *boolean,
+                Literals::Array(values) => values.len() > 0
             },
             _ => return Err(InterpreterError {
                 r#type: ErrorTypes::UnknownError,
@@ -351,6 +341,36 @@ impl Interpreter {
         self.env = prev_env;
 
         Ok(Values::None)
+    }
+
+    fn handle_value(&mut self, node: &Node) -> InterpreterResult<Values> {
+        match node {
+            Node::Literal(Literals::Int(integer)) => Ok(Values::Integer(integer.clone())),
+            Node::Literal(Literals::String(str)) => Ok(Values::String(str.clone())),
+            Node::Literal(Literals::Boolean(boolean)) => Ok(Values::Boolean(boolean.clone())),
+            Node::Literal(Literals::Array(values)) => {
+                let mut parsed_values: Vec<Values> = vec![];
+
+                for value in values {
+                    let value = match value {
+                        Literals::Int(integer) => Values::Integer(integer.clone()),
+                        Literals::String(str) => Values::String(str.clone()),
+                        Literals::Boolean(boolean) => Values::Boolean(boolean.clone()),
+                        _ => unreachable!()
+                    };
+
+                    parsed_values.push(value);
+                }
+
+                Ok(Values::Array(parsed_values))
+            },
+            Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str()),
+            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args),
+            _ => Err(InterpreterError {
+                r#type: ErrorTypes::UnknownError,
+                message: format!("Something went wrong while handling value")
+            })
+        }
     }
 
     fn exec_node(&mut self, node: &Node) -> InterpreterResult<Values> {

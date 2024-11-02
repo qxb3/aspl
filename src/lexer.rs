@@ -15,7 +15,9 @@ pub enum TokenTypes {
     AND,
     OR,
     OpenCurly,
-    CloseCurly
+    CloseCurly,
+    OpenBracket,
+    CloseBracket
 }
 
 impl TokenTypes {
@@ -23,6 +25,8 @@ impl TokenTypes {
     pub fn is_identifier(&self) -> bool { matches!(self, TokenTypes::Identifier) }
     pub fn is_open_curly(&self) -> bool { matches!(self, TokenTypes::OpenCurly) }
     pub fn is_close_curly(&self) -> bool { matches!(self, TokenTypes::CloseCurly) }
+    pub fn is_open_bracket(&self) -> bool { matches!(self, TokenTypes::OpenBracket) }
+    pub fn is_close_bracket(&self) -> bool { matches!(self, TokenTypes::CloseBracket) }
     pub fn is_fn_call(&self) -> bool { matches!(self, TokenTypes::FnCall) }
 
     pub fn is_literal(&self) -> bool{
@@ -209,6 +213,9 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
 
             '{' => Some(TokenTypes::OpenCurly),
             '}' => Some(TokenTypes::CloseCurly),
+
+            '[' => Some(TokenTypes::OpenBracket),
+            ']' => Some(TokenTypes::CloseBracket),
 
             _ => None,
         };
