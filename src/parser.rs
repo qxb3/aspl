@@ -103,6 +103,8 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             })
         };
 
+        println!("{:?}", &self.current_token);
+
         Ok(Node::Var {
             identifier: Box::new(identifier),
             value: Box::new(value)
@@ -331,10 +333,10 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
     fn parse_literal(&mut self) -> ParserResult<Node> {
         if let Some(token) = &self.current_token.clone() {
-            let value: Option<Literals> = match token.r#type {
-                TokenTypes::IntLiteral => Some(Literals::Int(token.value.clone().unwrap().parse().unwrap())),
-                TokenTypes::StringLiteral => Some(Literals::String(token.value.clone().unwrap().parse().unwrap())),
-                TokenTypes::BooleanLiteral => Some(Literals::Boolean(token.value.clone().unwrap().parse().unwrap())),
+            let value: Literals = match token.r#type {
+                TokenTypes::IntLiteral => Literals::Int(token.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::StringLiteral => Literals::String(token.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::BooleanLiteral => Literals::Boolean(token.value.clone().unwrap().parse().unwrap()),
                 TokenTypes::OpenBracket => {
                     self.advance();
 
@@ -367,19 +369,19 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                         })
                     }
 
-                    Some(Literals::Array(values))
+                    Literals::Array(values)
                 },
-                _ => None
-            };
-
-            if value.is_none() {
-                return Err(ParserError {
+                _ => return Err(ParserError {
                     message: format!("Expected a literal, but found {:?}", token.r#type),
                     token: Some(token.clone())
-                });
+                })
+            };
+
+            if token.r#type.is_literal() {
+                self.advance();
             }
 
-            return Ok(Node::Literal(value.unwrap()))
+            return Ok(Node::Literal(value))
         }
 
         Err(ParserError {
