@@ -162,6 +162,7 @@ impl Interpreter {
             for scope_node in body {
                 let ret_value = self.exec_node(scope_node.deref())?;
                 if !ret_value.is_none() {
+                    self.env = prev_env;
                     return Ok(ret_value);
                 }
             }
