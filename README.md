@@ -44,6 +44,19 @@ set msg @get
 @print msg
 ```
 
+### Sourcing
+```bash
+# utils.aspl
+fn util_foo {
+  logl "foo bar"
+}
+
+# main.aspl
+@source "./utils.aspl"
+
+@util_foo
+```
+
 ## Using
 
 ### Installation
