@@ -1,6 +1,6 @@
-use std::mem::discriminant;
-
-use crate::lexer::{Token, TokenTypes};
+use crate::lexer::{Lexer, Token, TokenTypes};
+use inline_colorization::*;
+use std::{fs, mem::discriminant};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Literals {
@@ -26,6 +26,7 @@ pub enum Node {
     Literal(Literals),
     Identifier(String),
     Return(Box<Node>),
+    Source(Vec<Node>),
     Var {
         identifier: Box<Node>,
         value: Box<Node>
@@ -46,10 +47,6 @@ pub enum Node {
     FunctionCall {
         identifier: Box<Node>,
         args: Vec<Box<Node>>
-    },
-    Import {
-        identifier: Box<Node>,
-        file: Box<Node>
     },
 
     // Statements
@@ -74,13 +71,13 @@ pub enum Node {
 #[derive(Debug, Clone)]
 pub struct Parser<T: Iterator<Item = Token> + Clone> {
     tokens: T,
-    current_token: Option<Token>
+    current_token: Option<Token>,
 }
 
 #[derive(Debug)]
 pub struct ParserError {
     pub message: String,
-    pub token: Option<Token>
+    pub token: Option<Token>,
 }
 
 type ParserResult<T> = Result<T, ParserError>;
@@ -91,7 +88,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         Self {
             tokens,
-            current_token
+            current_token,
         }
     }
 
@@ -101,26 +98,32 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         let identifier = self.parse_identifier()?;
 
         let value = match &self.current_token.clone() {
-            Some(node) => {
-                match node {
-                    node if node.r#type.is_literal() || node.r#type.is_open_bracket() => self.parse_literal()?,
-                    node if node.r#type.is_identifier() => self.parse_identifier()?,
-                    node if node.r#type.is_fn_call() => self.parse_function_call()?,
-                    _ => return Err(ParserError {
-                        message: format!("Expected a literal/identifier/function call, but found {:?}", node.r#type),
-                        token: Some(node.clone())
+            Some(node) => match node {
+                node if node.r#type.is_literal() ||
+                        node.r#type.is_open_bracket()   => self.parse_literal()?,
+                node if node.r#type.is_identifier()     => self.parse_identifier()?,
+                node if node.r#type.is_fn_call()        => self.parse_function_call()?,
+                _ => {
+                    return Err(ParserError {
+                        message: format!(
+                            "Expected a literal/identifier/function call, but found {:?}",
+                            node.r#type
+                        ),
+                        token: Some(node.clone()),
                     })
                 }
             },
-            None => return Err(ParserError {
-                message: format!("Unexpected end of input while parsing set statement"),
-                token: None
-            })
+            None => {
+                return Err(ParserError {
+                    message: format!("Unexpected end of input while parsing set statement"),
+                    token: None,
+                })
+            }
         };
 
         Ok(Node::Var {
             identifier: Box::new(identifier),
-            value: Box::new(value)
+            value: Box::new(value),
         })
     }
 
@@ -130,26 +133,32 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         let identifier = self.parse_identifier()?;
 
         let value = match &self.current_token.clone() {
-            Some(node) => {
-                match node {
-                    node if node.r#type.is_literal() || node.r#type.is_open_bracket() => self.parse_literal()?,
-                    node if node.r#type.is_identifier() => self.parse_identifier()?,
-                    node if node.r#type.is_fn_call() => self.parse_function_call()?,
-                    _ => return Err(ParserError {
-                        message: format!("Expected a literal/identifier/function call, but found {:?}", node.r#type),
-                        token: Some(node.clone())
+            Some(node) => match node {
+                node if node.r#type.is_literal() ||
+                        node.r#type.is_open_bracket()   => self.parse_literal()?,
+                node if node.r#type.is_identifier()     => self.parse_identifier()?,
+                node if node.r#type.is_fn_call()        => self.parse_function_call()?,
+                _ => {
+                    return Err(ParserError {
+                        message: format!(
+                            "Expected a literal/identifier/function call, but found {:?}",
+                            node.r#type
+                        ),
+                        token: Some(node.clone()),
                     })
                 }
             },
-            None => return Err(ParserError {
-                message: format!("Unexpected end of input while parsing update statement"),
-                token: None
-            })
+            None => {
+                return Err(ParserError {
+                    message: format!("Unexpected end of input while parsing update statement"),
+                    token: None,
+                })
+            }
         };
 
         Ok(Node::Update {
             identifier: Box::new(identifier),
-            value: Box::new(value)
+            value: Box::new(value),
         })
     }
 
@@ -160,23 +169,27 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         while let Some(arg) = &self.current_token {
             match arg.r#type {
-                arg if arg.is_literal() || arg.is_open_bracket() => args.push(Box::new(self.parse_literal()?)),
-                arg if arg.is_identifier() => args.push(Box::new(self.parse_identifier()?)),
-                arg if arg.is_fn_call() => args.push(Box::new(self.parse_function_call()?)),
-                _ => break
+                arg if arg.is_literal() ||
+                        arg.is_open_bracket()   => args.push(Box::new(self.parse_literal()?)),
+                arg if arg.is_identifier()      => args.push(Box::new(self.parse_identifier()?)),
+                arg if arg.is_fn_call()         => args.push(Box::new(self.parse_function_call()?)),
+                _ => break,
             }
         }
 
         if args.is_empty() {
             return Err(ParserError {
-                message: format!("Unexpected end of input while parsing {} statement", statement),
-                token: None
+                message: format!(
+                    "Unexpected end of input while parsing {} statement",
+                    statement
+                ),
+                token: None,
             });
         }
 
         Ok(Node::Log {
             r#type: statement,
-            args
+            args,
         })
     }
 
@@ -192,8 +205,8 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
                         return Ok(Node::Check {
                             condition: Box::new(condition),
-                            scope: Box::new(scope)
-                        })
+                            scope: Box::new(scope),
+                        });
                     }
                 }
             }
@@ -204,14 +217,14 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
                 return Ok(Node::Check {
                     condition: Box::new(literal),
-                    scope: Box::new(scope)
+                    scope: Box::new(scope),
                 });
             }
         }
 
         Err(ParserError {
             message: format!("Unexpected end of input while parsing check statement"),
-            token: None
+            token: None,
         })
     }
 
@@ -227,8 +240,8 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
                         return Ok(Node::While {
                             condition: Box::new(condition),
-                            scope: Box::new(scope)
-                        })
+                            scope: Box::new(scope),
+                        });
                     }
                 }
             }
@@ -239,23 +252,23 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
                 return Ok(Node::While {
                     condition: Box::new(literal),
-                    scope: Box::new(scope)
+                    scope: Box::new(scope),
                 });
             }
 
             return Err(ParserError {
                 message: format!("Expected a condition or literal, but found {:?}", token),
-                token: Some(token.clone())
-            })
+                token: Some(token.clone()),
+            });
         }
 
         Err(ParserError {
             message: format!("Unexpected end of input while parsing while statement"),
-            token: None
+            token: None,
         })
     }
 
-    fn parse_function(&mut self) -> ParserResult<Node>{
+    fn parse_function(&mut self) -> ParserResult<Node> {
         self.advance();
 
         let identifier = self.parse_identifier()?;
@@ -276,7 +289,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         Ok(Node::Function {
             identifier: Box::new(identifier.clone()),
             args,
-            scope: Box::new(scope)
+            scope: Box::new(scope),
         })
     }
 
@@ -286,34 +299,31 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         if let Some(token) = &self.current_token {
             if token.r#type.is_literal() || token.r#type.is_open_bracket() {
                 let ret_identifier = self.parse_literal()?;
-                return Ok(Node::Return(
-                    Box::new(ret_identifier)
-                ))
+                return Ok(Node::Return(Box::new(ret_identifier)));
             }
 
             if token.r#type.is_identifier() {
                 let ret_literal = self.parse_identifier()?;
-                return Ok(Node::Return(
-                    Box::new(ret_literal)
-                ))
+                return Ok(Node::Return(Box::new(ret_literal)));
             }
 
             if token.r#type.is_fn_call() {
                 let ret_fn_call = self.parse_function_call()?;
-                return Ok(Node::Return(
-                    Box::new(ret_fn_call)
-                ))
+                return Ok(Node::Return(Box::new(ret_fn_call)));
             }
 
             return Err(ParserError {
-                message: format!("Expected a literal/identifier/fn_call, but found {:?}", token.r#type),
-                token: Some(token.clone())
+                message: format!(
+                    "Expected a literal/identifier/fn_call, but found {:?}",
+                    token.r#type
+                ),
+                token: Some(token.clone()),
             });
         }
 
         Err(ParserError {
             message: format!("Unexpected end of input while parsing return"),
-            token: None
+            token: None,
         })
     }
 
@@ -323,24 +333,26 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             let statement = token.value.clone().unwrap();
 
             match statement.as_str() {
-                "set"           =>  return self.parse_set_statement(),
-                "update"        =>  return self.parse_update_statement(),
-                "log" | "logl"  =>  return self.parse_log_statement(statement),
-                "check"         =>  return self.parse_check_statement(),
-                "while"         =>  return self.parse_while_statement(),
-                "fn"            =>  return self.parse_function(),
-                "ret"           =>  return self.parse_return(),
+                "set"           => return self.parse_set_statement(),
+                "update"        => return self.parse_update_statement(),
+                "log" | "logl"  => return self.parse_log_statement(statement),
+                "check"         => return self.parse_check_statement(),
+                "while"         => return self.parse_while_statement(),
+                "fn"            => return self.parse_function(),
+                "ret"           => return self.parse_return(),
 
-                _ =>  return Err(ParserError {
-                    message: format!("Expected a statement, but found {:?}", token.r#type),
-                    token: Some(token.clone())
-                })
+                _ => {
+                    return Err(ParserError {
+                        message: format!("Expected a statement, but found {:?}", token.r#type),
+                        token: Some(token.clone()),
+                    })
+                }
             }
         }
 
         Err(ParserError {
             message: format!("Unexpected end of input while parsing statement"),
-            token: None
+            token: None,
         })
     }
 
@@ -365,10 +377,15 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                             TokenTypes::IntLiteral => Literals::Int(token.value.clone().unwrap().parse().unwrap()),
                             TokenTypes::StringLiteral => Literals::String(token.value.clone().unwrap().parse().unwrap()),
                             TokenTypes::BooleanLiteral => Literals::Boolean(token.value.clone().unwrap().parse().unwrap()),
-                            _ => return Err(ParserError {
-                                message: format!("Expected a literal, but found {:?}", token.r#type),
-                                token: Some(token.clone())
-                            })
+                            _ => {
+                                return Err(ParserError {
+                                    message: format!(
+                                        "Expected a literal, but found {:?}",
+                                        token.r#type
+                                    ),
+                                    token: Some(token.clone()),
+                                })
+                            }
                         };
 
                         values.push(value);
@@ -378,15 +395,15 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                     if !values.iter().all(|value| discriminant(value) == discriminant(&values[0])) {
                         return Err(ParserError {
                             message: format!("Cannot have two or more types in array"),
-                            token: Some(token.clone())
-                        })
+                            token: Some(token.clone()),
+                        });
                     }
 
                     Literals::Array(values)
-                },
+                }
                 _ => return Err(ParserError {
                     message: format!("Expected a literal, but found {:?}", token.r#type),
-                    token: Some(token.clone())
+                    token: Some(token.clone()),
                 })
             };
 
@@ -394,12 +411,12 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 self.advance();
             }
 
-            return Ok(Node::Literal(value))
+            return Ok(Node::Literal(value));
         }
 
         Err(ParserError {
             message: format!("Unexpected end of input while parsing literal"),
-            token: None
+            token: None,
         })
     }
 
@@ -408,7 +425,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             if !token.r#type.is_identifier() {
                 return Err(ParserError {
                     message: format!("Expected a identifier, but found {:?}", token.r#type),
-                    token: Some(token.clone())
+                    token: Some(token.clone()),
                 });
             }
 
@@ -419,7 +436,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         Err(ParserError {
             message: format!("Unexpected end of input while parsing identifier"),
-            token: None
+            token: None,
         })
     }
 
@@ -428,34 +445,42 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             Some(left) => match left {
                 left if left.r#type.is_identifier() => self.parse_identifier()?,
                 left if left.r#type.is_literal() => self.parse_literal()?,
-                left => return Err(ParserError {
-                    message: format!("Expected a identifier or literal, but found {:?}", left),
-                    token: Some(left.clone())
-                })
+                left => {
+                    return Err(ParserError {
+                        message: format!("Expected a identifier or literal, but found {:?}", left),
+                        token: Some(left.clone()),
+                    })
+                }
             },
-            None => return Err(ParserError {
-                message: format!("Unexpected end of input while parsing condition"),
-                token: None
-            })
+            None => {
+                return Err(ParserError {
+                    message: format!("Unexpected end of input while parsing condition"),
+                    token: None,
+                })
+            }
         };
 
         let condition = match &self.current_token {
             Some(token) => match token.r#type {
-                TokenTypes::EqEq => "==",
-                TokenTypes::NotEq => "!=",
-                TokenTypes::GThan => ">",
+                TokenTypes::EqEq    => "==",
+                TokenTypes::NotEq   => "!=",
+                TokenTypes::GThan   => ">",
                 TokenTypes::GThanEq => ">=",
-                TokenTypes::LThan => "<",
+                TokenTypes::LThan   => "<",
                 TokenTypes::LThanEq => "<=",
-                token_type => return Err(ParserError {
-                    message: format!("Expected a condition, but found {:?}", token_type),
-                    token: Some(token.clone())
-                })
+                token_type => {
+                    return Err(ParserError {
+                        message: format!("Expected a condition, but found {:?}", token_type),
+                        token: Some(token.clone()),
+                    })
+                }
             },
-            None => return Err(ParserError {
-                message: format!("Unexpected end of input while parsing condition"),
-                token: None
-            })
+            None => {
+                return Err(ParserError {
+                    message: format!("Unexpected end of input while parsing condition"),
+                    token: None,
+                })
+            }
         };
 
         // Advance from condition
@@ -465,21 +490,25 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             Some(right) => match right {
                 right if right.r#type.is_identifier() => self.parse_identifier()?,
                 right if right.r#type.is_literal() => self.parse_literal()?,
-                right => return Err(ParserError {
-                    message: format!("Expected a identifier or literal, but found {:?}", right),
-                    token: Some(right.clone())
-                })
+                right => {
+                    return Err(ParserError {
+                        message: format!("Expected a identifier or literal, but found {:?}", right),
+                        token: Some(right.clone()),
+                    })
+                }
             },
-            None => return Err(ParserError {
-                message: format!("Unexpected end of input while parsing condition"),
-                token: None
-            })
+            None => {
+                return Err(ParserError {
+                    message: format!("Unexpected end of input while parsing condition"),
+                    token: None,
+                })
+            }
         };
 
         Ok(Node::Condition {
             left: Box::new(left),
             condition: condition.to_string(),
-            right: Box::new(right)
+            right: Box::new(right),
         })
     }
 
@@ -498,18 +527,18 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             body.push(Box::new(parsed_token));
         }
 
-        Ok(Node::Scope {
-            body
-        })
+        Ok(Node::Scope { body })
     }
 
     fn parse_function_call(&mut self) -> ParserResult<Node> {
         let identifier = match &self.current_token {
             Some(token) => Node::Identifier(token.clone().value.unwrap_or_default()),
-            None => return Err(ParserError {
-                message: format!("Unexpected end of input while parsing function call"),
-                token: None
-            })
+            None => {
+                return Err(ParserError {
+                    message: format!("Unexpected end of input while parsing function call"),
+                    token: None,
+                })
+            }
         };
 
         self.advance();
@@ -520,7 +549,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             let foo = match token.r#type {
                 r#type if r#type.is_literal() => self.parse_literal()?,
                 r#type if r#type.is_identifier() => self.parse_identifier()?,
-                _ => break
+                _ => break,
             };
 
             args.push(Box::new(foo));
@@ -528,40 +557,48 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         Ok(Node::FunctionCall {
             identifier: Box::new(identifier),
-            args
+            args,
         })
     }
 
-    fn parse_import(&mut self) -> ParserResult<Node> {
+    fn parse_source(&mut self) -> ParserResult<Node> {
         self.advance();
 
-        let identifier = self.parse_identifier()?;
-
-        let literal = match self.parse_literal() {
-            Ok(node) => {
-                if let Node::Literal(literal) = &node {
-                    if literal.name() != "string" {
-                        return Err(ParserError {
-                            message: format!("Expected a file, but found {:?}", literal.name()),
-                            token: Some(self.current_token.clone().unwrap())
-                        });
-                    }
-
-                    node
-                } else {
-                    return Err(ParserError {
-                        message: format!("Expected a file, but found {:?}", self.current_token.clone().unwrap().r#type),
-                        token: Some(self.current_token.clone().unwrap())
-                    });
-                }
-            },
-            Err(err) => return Err(err)
+        let file_name = match self.parse_literal() {
+            Ok(Node::Literal(Literals::String(file_name))) => file_name,
+            Err(err) => return Err(err),
+            _ => unreachable!(),
         };
 
-        Ok(Node::Import {
-            identifier: Box::new(identifier),
-            file: Box::new(literal)
-        })
+        let source = match fs::read_to_string(&file_name) {
+            Ok(contents) => contents,
+            Err(_) => {
+                return Err(ParserError {
+                    message: format!("Cannot find file {:?}", file_name),
+                    token: None,
+                })
+            }
+        };
+
+        let tokens = match Lexer::new(source.as_str().chars()).lex() {
+            Ok(tokens) => tokens,
+            Err(err) => {
+                return Err(ParserError {
+                    message: format!(
+                        r#"
+                        Error while lexing file: {:?}
+                        {color_red}[ERROR]{color_reset} -> Lexing Error: {}.
+                    "#,
+                        file_name, err.message
+                    ),
+                    token: None,
+                })
+            }
+        };
+
+        let ast = Parser::new(tokens.iter().cloned().into_iter()).parse()?;
+
+        Ok(Node::Source(ast))
     }
 
     // Parse all expressions
@@ -576,11 +613,11 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 }
             }
 
-            // Check & Parse Fn Call
+            // Check & Parse Import/Fn_Call
             if token.r#type.is_fn_call() {
                 if let Some(fn_call_name) = &token.value {
-                    if fn_call_name == "imp" {
-                        return self.parse_import();
+                    if fn_call_name == "source" {
+                        return self.parse_source();
                     }
                 }
 
@@ -605,7 +642,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         Err(ParserError {
             message: format!("unexpected end of input while parsing expression"),
-            token: None
+            token: None,
         })
     }
 
@@ -620,7 +657,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         Err(ParserError {
             message: format!("Unhandled Token"),
-            token: Some(self.current_token.clone().unwrap())
+            token: Some(self.current_token.clone().unwrap()),
         })
     }
 

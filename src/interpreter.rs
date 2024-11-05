@@ -4,13 +4,13 @@ use std::{cell::RefCell, collections::HashMap, mem::discriminant, ops::Deref, rc
 macro_rules! compare {
     ($left:expr, $condition:expr, $right:expr) => {
         match $condition.as_str() {
-            "==" => $left == $right,
-            "!=" => $left != $right,
-            ">" => $left > $right,
-            ">=" => $left >= $right,
-            "<" => $left < $right,
-            "<=" => $left <= $right,
-            _ => unreachable!()
+            "=="    => $left == $right,
+            "!="    => $left != $right,
+            ">"     => $left > $right,
+            ">="    => $left >= $right,
+            "<"     => $left < $right,
+            "<="    => $left <= $right,
+            _       => unreachable!(),
         }
     };
 }
@@ -26,7 +26,7 @@ pub enum ErrorTypes {
 #[derive(Debug)]
 pub struct InterpreterError {
     pub r#type: ErrorTypes,
-    pub message: String
+    pub message: String,
 }
 
 type InterpreterResult<T> = Result<T, InterpreterError>;
@@ -40,36 +40,41 @@ enum Values {
     Function {
         identifier: String,
         args: Vec<Box<Node>>,
-        scope: Box<Node>
+        scope: Box<Node>,
     },
     None,
 }
 
 impl Values {
-    fn is_none(&self) -> bool { matches!(self, Values::None) }
+    fn is_none(&self) -> bool {
+        matches!(self, Values::None)
+    }
 
     fn name(&self) -> String {
         match self {
-            Values::Integer(integer) => integer.to_string(),
-            Values::String(str) => format!("{:?}", str),
-            Values::Boolean(boolean) => boolean.to_string(),
-            Values::Array(values) => format!("{:?}", values),
-            Values::Function { identifier, .. } => identifier.to_string(),
-            Values::None => "None".to_string()
+            Values::Integer(integer)    => integer.to_string(),
+            Values::String(str)         => format!("{:?}", str),
+            Values::Boolean(boolean)    => boolean.to_string(),
+            Values::Array(values)       => format!("{:?}", values),
+            Values::Function {
+                identifier,
+                ..
+            }                           => identifier.to_string(),
+            Values::None                => "None".to_string(),
         }
     }
 }
 
 struct Env {
     vars: HashMap<String, Values>,
-    parent: Option<Rc<RefCell<Env>>>
+    parent: Option<Rc<RefCell<Env>>>,
 }
 
 impl Env {
     fn new(parent: Option<Rc<RefCell<Env>>>) -> Self {
         Env {
             vars: HashMap::new(),
-            parent
+            parent,
         }
     }
 
@@ -88,32 +93,32 @@ impl Env {
 
         Err(InterpreterError {
             r#type: ErrorTypes::UndefinedVar,
-            message: format!("Cannot find var: {:?}", name)
+            message: format!("Cannot find var: {:?}", name),
         })
     }
 }
 
 pub struct Interpreter {
-    env: Rc<RefCell<Env>>
+    env: Rc<RefCell<Env>>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Self {
-            env: Rc::new(RefCell::new(Env::new(None)))
+            env: Rc::new(RefCell::new(Env::new(None))),
         }
     }
 
     fn handle_fn(&mut self, identifier: &Box<Node>, args: &Vec<Box<Node>>, scope: &Box<Node>) -> InterpreterResult<Values> {
         let identifier = match identifier.deref() {
             Node::Identifier(identifier) => identifier,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         let function = Values::Function {
             identifier: identifier.to_string(),
             args: args.clone(),
-            scope: scope.clone()
+            scope: scope.clone(),
         };
 
         self.env.borrow_mut().set(identifier.as_str(), function);
@@ -129,21 +134,28 @@ impl Interpreter {
     fn handle_fn_call(&mut self, identifier: &Box<Node>, args: &Vec<Box<Node>>) -> InterpreterResult<Values> {
         let name = match identifier.deref() {
             Node::Identifier(identifier) => identifier,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         let (fn_args, fn_scope) = match self.env.borrow().get(name.as_str()) {
             Ok(Values::Function { args, scope, .. }) => (args, scope),
-            _ => return Err(InterpreterError {
-                r#type: ErrorTypes::UndefinedFn,
-                message: format!("Cannot find function: {:?}", name)
-            })
+            _ => {
+                return Err(InterpreterError {
+                    r#type: ErrorTypes::UndefinedFn,
+                    message: format!("Cannot find function: {:?}", name),
+                })
+            }
         };
 
         if args.len() != fn_args.len() {
             return Err(InterpreterError {
                 r#type: ErrorTypes::TypeError,
-                message: format!("Argument mismatch on function {:?}, Expected {} but found only {}", name, fn_args.len(), args.len())
+                message: format!(
+                    "Argument mismatch on function {:?}, Expected {} but found only {}",
+                    name,
+                    fn_args.len(),
+                    args.len()
+                ),
             });
         }
 
@@ -173,6 +185,14 @@ impl Interpreter {
         Ok(Values::None)
     }
 
+    fn handle_source(&mut self, ast: &Vec<Node>) -> InterpreterResult<Values> {
+        for node in ast {
+            self.exec_node(node)?;
+        }
+
+        Ok(Values::None)
+    }
+
     fn handle_scope(&mut self, body: &Vec<Box<Node>>) -> InterpreterResult<Values> {
         let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
         let prev_env = std::mem::replace(&mut self.env, new_env);
@@ -189,7 +209,7 @@ impl Interpreter {
     fn handle_var(&mut self, identifier: &Box<Node>, value: &Box<Node>) -> InterpreterResult<Values> {
         let name = match identifier.deref() {
             Node::Identifier(identifier) => identifier,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         let val = self.handle_value(value.deref())?;
@@ -201,7 +221,7 @@ impl Interpreter {
     fn handle_update(&mut self, identifier: &Box<Node>, value: &Box<Node>) -> InterpreterResult<Values> {
         let name = match identifier.deref() {
             Node::Identifier(identifier) => identifier,
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         let val = self.handle_value(value.deref())?;
@@ -211,11 +231,15 @@ impl Interpreter {
                 if discriminant(&val) != discriminant(&variable) {
                     return Err(InterpreterError {
                         r#type: ErrorTypes::TypeError,
-                        message: format!("Cannot update variable with different type: {:?} -> {:?}", val.name(), variable.name())
-                    })
+                        message: format!(
+                            "Cannot update variable with different type: {:?} -> {:?}",
+                            val.name(),
+                            variable.name()
+                        ),
+                    });
                 }
-            },
-            Err(err) => return Err(err)
+            }
+            Err(err) => return Err(err),
         }
 
         self.env.borrow_mut().set(name.as_str(), val);
@@ -230,21 +254,29 @@ impl Interpreter {
             let value = self.handle_value(arg.deref())?;
 
             match value {
-                Values::Integer(integer) => output.push_str(integer.to_string().as_str()),
-                Values::String(str) => output.push_str(str.as_str()),
-                Values::Boolean(boolean) => output.push_str(boolean.to_string().as_str()),
-                Values::Array(values) => output.push_str((values.iter().map(|value| value.name()).collect::<Vec<String>>()).join(" ").as_str()),
-                _ => return Err(InterpreterError {
-                    r#type: ErrorTypes::UnknownError,
-                    message: format!("Something went wrong while handling log args")
-                })
+                Values::Integer(integer)    => output.push_str(integer.to_string().as_str()),
+                Values::String(str)         => output.push_str(str.as_str()),
+                Values::Boolean(boolean)    => output.push_str(boolean.to_string().as_str()),
+                Values::Array(values)       => output.push_str(
+                    (values.iter()
+                        .map(|value| value.name())
+                        .collect::<Vec<String>>())
+                        .join(" ")
+                        .as_str()
+                ),
+                _ => {
+                    return Err(InterpreterError {
+                        r#type: ErrorTypes::UnknownError,
+                        message: format!("Something went wrong while handling log args"),
+                    })
+                }
             }
         }
 
         match log_type {
-            "log" => print!("{output}"),
-            "logl" => println!("{output}"),
-            _ => ()
+            "log"   => print!("{output}"),
+            "logl"  => println!("{output}"),
+            _       => (),
         }
 
         Ok(Values::None)
@@ -257,25 +289,29 @@ impl Interpreter {
                 let right_value = self.handle_value(right.deref())?;
 
                 match (left_value, right_value) {
-                    (Values::Integer(left_int), Values::Integer(right_int)) => compare!(left_int, condition, right_int),
-                    (Values::String(left_str), Values::String(right_str)) => compare!(left_str, condition, right_str),
+                    (Values::Integer(left_int), Values::Integer(right_int))         => compare!(left_int, condition, right_int),
+                    (Values::String(left_str), Values::String(right_str))           => compare!(left_str, condition, right_str),
                     (Values::Boolean(left_boolean), Values::Boolean(right_boolean)) => compare!(left_boolean, condition, right_boolean),
-                    _ => return Err(InterpreterError {
-                        r#type: ErrorTypes::TypeError,
-                        message: format!("Cannot compare {:?} to {:?}", left, right)
-                    })
+                    _ => {
+                        return Err(InterpreterError {
+                            r#type: ErrorTypes::TypeError,
+                            message: format!("Cannot compare {:?} to {:?}", left, right),
+                        })
+                    }
                 }
-            },
+            }
             Node::Literal(literal) => match literal {
-                Literals::Int(integer) => *integer > 0,
-                Literals::String(str) => str.len() > 0,
-                Literals::Boolean(boolean) => *boolean,
-                Literals::Array(values) => values.len() > 0,
+                Literals::Int(integer)      => *integer > 0,
+                Literals::String(str)       => str.len() > 0,
+                Literals::Boolean(boolean)  => *boolean,
+                Literals::Array(values)     => values.len() > 0,
             },
-            _ => return Err(InterpreterError {
-                r#type: ErrorTypes::UnknownError,
-                message: format!("Something went wrong in handle_check")
-            })
+            _ => {
+                return Err(InterpreterError {
+                    r#type: ErrorTypes::UnknownError,
+                    message: format!("Something went wrong in handle_check"),
+                })
+            }
         };
 
         let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
@@ -304,25 +340,29 @@ impl Interpreter {
                 let right_value = self.handle_value(right.deref())?;
 
                 match (left_value, right_value) {
-                    (Values::Integer(left_int), Values::Integer(right_int)) => compare!(left_int, condition, right_int),
-                    (Values::String(left_str), Values::String(right_str)) => compare!(left_str, condition, right_str),
+                    (Values::Integer(left_int), Values::Integer(right_int))         => compare!(left_int, condition, right_int),
+                    (Values::String(left_str), Values::String(right_str))           => compare!(left_str, condition, right_str),
                     (Values::Boolean(left_boolean), Values::Boolean(right_boolean)) => compare!(left_boolean, condition, right_boolean),
-                    _ => return Err(InterpreterError {
-                        r#type: ErrorTypes::TypeError,
-                        message: format!("Cannot compare {:?} to {:?}", left, right)
-                    })
+                    _ => {
+                        return Err(InterpreterError {
+                            r#type: ErrorTypes::TypeError,
+                            message: format!("Cannot compare {:?} to {:?}", left, right),
+                        })
+                    }
                 }
-            },
+            }
             Node::Literal(literal) => match literal {
-                Literals::Int(integer) => *integer > 0,
-                Literals::String(str) => str.len() > 0,
-                Literals::Boolean(boolean) => *boolean,
-                Literals::Array(values) => values.len() > 0
+                Literals::Int(integer)      => *integer > 0,
+                Literals::String(str)       => str.len() > 0,
+                Literals::Boolean(boolean)  => *boolean,
+                Literals::Array(values)     => values.len() > 0,
             },
-            _ => return Err(InterpreterError {
-                r#type: ErrorTypes::UnknownError,
-                message: format!("Something went wrong in handle_while")
-            })
+            _ => {
+                return Err(InterpreterError {
+                    r#type: ErrorTypes::UnknownError,
+                    message: format!("Something went wrong in handle_while"),
+                })
+            }
         };
 
         let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
@@ -346,46 +386,47 @@ impl Interpreter {
 
     fn handle_value(&mut self, node: &Node) -> InterpreterResult<Values> {
         match node {
-            Node::Literal(Literals::Int(integer)) => Ok(Values::Integer(integer.clone())),
-            Node::Literal(Literals::String(str)) => Ok(Values::String(str.clone())),
-            Node::Literal(Literals::Boolean(boolean)) => Ok(Values::Boolean(boolean.clone())),
+            Node::Literal(Literals::Int(integer))       => Ok(Values::Integer(integer.clone())),
+            Node::Literal(Literals::String(str))        => Ok(Values::String(str.clone())),
+            Node::Literal(Literals::Boolean(boolean))   => Ok(Values::Boolean(boolean.clone())),
             Node::Literal(Literals::Array(values)) => {
                 let mut parsed_values: Vec<Values> = vec![];
 
                 for value in values {
                     let value = match value {
-                        Literals::Int(integer) => Values::Integer(integer.clone()),
-                        Literals::String(str) => Values::String(str.clone()),
-                        Literals::Boolean(boolean) => Values::Boolean(boolean.clone()),
-                        _ => unreachable!()
+                        Literals::Int(integer)      => Values::Integer(integer.clone()),
+                        Literals::String(str)       => Values::String(str.clone()),
+                        Literals::Boolean(boolean)  => Values::Boolean(boolean.clone()),
+                        _ => unreachable!(),
                     };
 
                     parsed_values.push(value);
                 }
 
                 Ok(Values::Array(parsed_values))
-            },
+            }
             Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str()),
             Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args),
             _ => Err(InterpreterError {
                 r#type: ErrorTypes::UnknownError,
-                message: format!("Something went wrong while handling value")
-            })
+                message: format!("Something went wrong while handling value"),
+            }),
         }
     }
 
     fn exec_node(&mut self, node: &Node) -> InterpreterResult<Values> {
         match node {
-            Node::Function { identifier, args, scope } => self.handle_fn(identifier, args, scope),
-            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args),
-            Node::Return(value) => self.handle_ret(value),
-            Node::Scope { body } => self.handle_scope(body),
-            Node::Var { identifier, value } => self.handle_var(identifier, value),
-            Node::Update { identifier, value } => self.handle_update(identifier, value),
-            Node::Check { condition, scope } => self.handle_check(condition, scope),
-            Node::While { condition, scope } => self.handle_while(condition, scope),
-            Node::Log { r#type, args } => self.handle_log(r#type.as_str(), args),
-            _ => Ok(Values::None)
+            Node::Function { identifier, args, scope }  => self.handle_fn(identifier, args, scope),
+            Node::FunctionCall { identifier, args }     => self.handle_fn_call(identifier, args),
+            Node::Return(value)                         => self.handle_ret(value),
+            Node::Source(ast)                           => self.handle_source(ast),
+            Node::Scope { body }                        => self.handle_scope(body),
+            Node::Var { identifier, value }             => self.handle_var(identifier, value),
+            Node::Update { identifier, value }          => self.handle_update(identifier, value),
+            Node::Check { condition, scope }            => self.handle_check(condition, scope),
+            Node::While { condition, scope }            => self.handle_while(condition, scope),
+            Node::Log { r#type, args }                  => self.handle_log(r#type.as_str(), args),
+            _                                           => Ok(Values::None),
         }
     }
 
