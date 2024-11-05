@@ -21,19 +21,20 @@ pub enum TokenTypes {
 }
 
 impl TokenTypes {
-    pub fn is_statement(&self) -> bool { matches!(self, TokenTypes::Statement) }
-    pub fn is_identifier(&self) -> bool { matches!(self, TokenTypes::Identifier) }
-    pub fn is_open_curly(&self) -> bool { matches!(self, TokenTypes::OpenCurly) }
-    pub fn is_close_curly(&self) -> bool { matches!(self, TokenTypes::CloseCurly) }
-    pub fn is_open_bracket(&self) -> bool { matches!(self, TokenTypes::OpenBracket) }
-    pub fn is_close_bracket(&self) -> bool { matches!(self, TokenTypes::CloseBracket) }
-    pub fn is_fn_call(&self) -> bool { matches!(self, TokenTypes::FnCall) }
+    pub fn is_statement(&self)      -> bool { matches!(self, TokenTypes::Statement) }
+    pub fn is_identifier(&self)     -> bool { matches!(self, TokenTypes::Identifier) }
+    pub fn is_open_curly(&self)     -> bool { matches!(self, TokenTypes::OpenCurly) }
+    pub fn is_close_curly(&self)    -> bool { matches!(self, TokenTypes::CloseCurly) }
+    pub fn is_open_bracket(&self)   -> bool { matches!(self, TokenTypes::OpenBracket) }
+    pub fn is_close_bracket(&self)  -> bool { matches!(self, TokenTypes::CloseBracket) }
+    pub fn is_fn_call(&self)        -> bool { matches!(self, TokenTypes::FnCall) }
 
     pub fn is_literal(&self) -> bool{
         return matches!(self,
             TokenTypes::IntLiteral |
             TokenTypes::StringLiteral |
-            TokenTypes::BooleanLiteral);
+            TokenTypes::BooleanLiteral
+        );
     }
 
     pub fn is_condition_op(&self) -> bool {
@@ -43,7 +44,8 @@ impl TokenTypes {
             TokenTypes::GThan |
             TokenTypes::GThanEq |
             TokenTypes::LThan |
-            TokenTypes::LThanEq);
+            TokenTypes::LThanEq
+        );
     }
 }
 
