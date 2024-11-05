@@ -49,7 +49,7 @@ impl TokenTypes {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
     pub r#type: TokenTypes,
     pub value: Option<String>,
@@ -71,7 +71,7 @@ pub struct LexerError {
     pub char: Option<char>
 }
 
-type LexerResult<T> = Result<T, LexerError>;
+pub type LexerResult<T> = Result<T, LexerError>;
 
 impl<T: Iterator<Item = char> + Clone> Lexer<T> {
     pub fn new(mut chars: T) -> Self {
@@ -294,7 +294,7 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
                 continue;
             }
 
-            if char.is_alphanumeric() && !char.is_numeric() {
+            if (char.is_alphanumeric() || char == '_') && !char.is_numeric() {
                 let identifier = self.lex_identifier()?;
                 parsed_tokens.push(identifier);
 
