@@ -1,7 +1,6 @@
 # aspl - A Simple Programming Language
 
 **aspl** is a simple, intuitive programming language inspired by the Bash shell and Unix command-like systems.
-It is designed to streamline scripting tasks and command execution with a syntax that feels familiar to those accustomed to Unix environments.
 
 ## Language
 
