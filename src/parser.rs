@@ -10,6 +10,17 @@ pub enum Literals {
     Array(Vec<Literals>)
 }
 
+impl Literals {
+    pub fn name(&self) -> &str {
+        match self {
+            Literals::Int(_) => "int",
+            Literals::String(_) => "string",
+            Literals::Boolean(_) => "boolean",
+            Literals::Array(_) => "array"
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Node {
     Literal(Literals),
@@ -35,6 +46,10 @@ pub enum Node {
     FunctionCall {
         identifier: Box<Node>,
         args: Vec<Box<Node>>
+    },
+    Import {
+        identifier: Box<Node>,
+        file: Box<Node>
     },
 
     // Statements
@@ -102,8 +117,6 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 token: None
             })
         };
-
-        println!("{:?}", &self.current_token);
 
         Ok(Node::Var {
             identifier: Box::new(identifier),
@@ -519,6 +532,38 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         })
     }
 
+    fn parse_import(&mut self) -> ParserResult<Node> {
+        self.advance();
+
+        let identifier = self.parse_identifier()?;
+
+        let literal = match self.parse_literal() {
+            Ok(node) => {
+                if let Node::Literal(literal) = &node {
+                    if literal.name() != "string" {
+                        return Err(ParserError {
+                            message: format!("Expected a file, but found {:?}", literal.name()),
+                            token: Some(self.current_token.clone().unwrap())
+                        });
+                    }
+
+                    node
+                } else {
+                    return Err(ParserError {
+                        message: format!("Expected a file, but found {:?}", self.current_token.clone().unwrap().r#type),
+                        token: Some(self.current_token.clone().unwrap())
+                    });
+                }
+            },
+            Err(err) => return Err(err)
+        };
+
+        Ok(Node::Import {
+            identifier: Box::new(identifier),
+            file: Box::new(literal)
+        })
+    }
+
     // Parse all expressions
     fn parse_expr(&mut self) -> ParserResult<Node> {
         if let Some(token) = &self.current_token {
@@ -533,6 +578,12 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
             // Check & Parse Fn Call
             if token.r#type.is_fn_call() {
+                if let Some(fn_call_name) = &token.value {
+                    if fn_call_name == "imp" {
+                        return self.parse_import();
+                    }
+                }
+
                 return self.parse_function_call();
             }
 
