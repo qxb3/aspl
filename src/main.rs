@@ -2,7 +2,7 @@ mod lexer;
 mod parser;
 mod interpreter;
 
-use std::{env, fs, process::exit};
+use std::{env, fs, path::Path, process::exit};
 use inline_colorization::*;
 use interpreter::Interpreter;
 use lexer::Lexer;
@@ -18,6 +18,14 @@ fn main() {
         None => {
             println!("{color_red}[ERROR]{color_reset} -> Specify the aspl file:");
             println!("{color_green}[USAGE]{color_reset} -> $ aspl <input.aspl>");
+            exit(1);
+        }
+    };
+
+    let source_path = match Path::new(&source_file).parent() {
+        Some(path) => path.to_str().unwrap().to_string(),
+        None => {
+            println!("{color_red}[FATAL]{color_reset} -> Cannot get path.");
             exit(1);
         }
     };
@@ -45,7 +53,7 @@ fn main() {
 
     // println!("{:#?}", tokens);
 
-    let ast = match Parser::new(tokens.iter().cloned().into_iter()).parse() {
+    let ast = match Parser::new(tokens.iter().cloned().into_iter(), source_path).parse() {
         Ok(ast) => ast,
         Err(err) => {
             println!("{color_red}[ERROR]{color_reset} -> Parsing Error: {}.", err.message);

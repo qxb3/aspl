@@ -419,7 +419,7 @@ impl Interpreter {
             Node::Function { identifier, args, scope }  => self.handle_fn(identifier, args, scope),
             Node::FunctionCall { identifier, args }     => self.handle_fn_call(identifier, args),
             Node::Return(value)                         => self.handle_ret(value),
-            Node::Source(ast)                           => self.handle_source(ast),
+            Node::Source { ast, .. }                    => self.handle_source(ast),
             Node::Scope { body }                        => self.handle_scope(body),
             Node::Var { identifier, value }             => self.handle_var(identifier, value),
             Node::Update { identifier, value }          => self.handle_update(identifier, value),

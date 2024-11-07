@@ -10,23 +10,22 @@ pub enum Literals {
     Array(Vec<Literals>)
 }
 
-impl Literals {
-    pub fn name(&self) -> &str {
-        match self {
-            Literals::Int(_) => "int",
-            Literals::String(_) => "string",
-            Literals::Boolean(_) => "boolean",
-            Literals::Array(_) => "array"
-        }
-    }
-}
+// impl Literals {
+//     pub fn name(&self) -> &str {
+//         match self {
+//             Literals::Int(_) => "int",
+//             Literals::String(_) => "string",
+//             Literals::Boolean(_) => "boolean",
+//             Literals::Array(_) => "array"
+//         }
+//     }
+// }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Node {
     Literal(Literals),
     Identifier(String),
     Return(Box<Node>),
-    Source(Vec<Node>),
     Var {
         identifier: Box<Node>,
         value: Box<Node>
@@ -48,6 +47,11 @@ pub enum Node {
         identifier: Box<Node>,
         args: Vec<Box<Node>>
     },
+    Source {
+        cwd: String,
+        file_name: String,
+        ast: Vec<Node>
+    },
 
     // Statements
     Log {
@@ -68,12 +72,6 @@ pub enum Node {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Parser<T: Iterator<Item = Token> + Clone> {
-    tokens: T,
-    current_token: Option<Token>,
-}
-
 #[derive(Debug)]
 pub struct ParserError {
     pub message: String,
@@ -82,13 +80,21 @@ pub struct ParserError {
 
 type ParserResult<T> = Result<T, ParserError>;
 
+#[derive(Debug, Clone)]
+pub struct Parser<T: Iterator<Item = Token> + Clone> {
+    tokens: T,
+    current_token: Option<Token>,
+    cwd: String
+}
+
 impl<T: Iterator<Item = Token> + Clone> Parser<T> {
-    pub fn new(mut tokens: T) -> Self {
+    pub fn new(mut tokens: T, cwd: String) -> Self {
         let current_token = tokens.next();
 
         Self {
             tokens,
             current_token,
+            cwd
         }
     }
 
@@ -564,17 +570,17 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
     fn parse_source(&mut self) -> ParserResult<Node> {
         self.advance();
 
-        let file_name = match self.parse_literal() {
+        let file_path = match self.parse_literal() {
             Ok(Node::Literal(Literals::String(file_name))) => file_name,
             Err(err) => return Err(err),
             _ => unreachable!(),
         };
 
-        let source = match fs::read_to_string(&file_name) {
+        let source = match fs::read_to_string(format!("{}/{}", self.cwd, file_path)) {
             Ok(contents) => contents,
             Err(_) => {
                 return Err(ParserError {
-                    message: format!("Cannot find file {:?}", file_name),
+                    message: format!("Cannot find file {}/{}", self.cwd, file_path),
                     token: None,
                 })
             }
@@ -589,16 +595,20 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                         Error while lexing file: {:?}
                         {color_red}[ERROR]{color_reset} -> Lexing Error: {}.
                     "#,
-                        file_name, err.message
+                        file_path, err.message
                     ),
                     token: None,
                 })
             }
         };
 
-        let ast = Parser::new(tokens.iter().cloned().into_iter()).parse()?;
+        let ast = Parser::new(tokens.iter().cloned().into_iter(), self.cwd.clone()).parse()?;
 
-        Ok(Node::Source(ast))
+        Ok(Node::Source {
+            cwd: self.cwd.clone(),
+            file_name: file_path,
+            ast
+        })
     }
 
     // Parse all expressions
