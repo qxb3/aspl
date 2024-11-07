@@ -1,6 +1,6 @@
 use crate::lexer::{Lexer, Token, TokenTypes};
 use inline_colorization::*;
-use std::{fs, mem::discriminant};
+use std::{env, fs, mem::discriminant, path::{Path, PathBuf}};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Literals {
@@ -48,8 +48,8 @@ pub enum Node {
         args: Vec<Box<Node>>
     },
     Source {
-        cwd: String,
         file_name: String,
+        cwd: PathBuf,
         ast: Vec<Node>
     },
 
@@ -83,18 +83,16 @@ type ParserResult<T> = Result<T, ParserError>;
 #[derive(Debug, Clone)]
 pub struct Parser<T: Iterator<Item = Token> + Clone> {
     tokens: T,
-    current_token: Option<Token>,
-    cwd: String
+    current_token: Option<Token>
 }
 
 impl<T: Iterator<Item = Token> + Clone> Parser<T> {
-    pub fn new(mut tokens: T, cwd: String) -> Self {
+    pub fn new(mut tokens: T) -> Self {
         let current_token = tokens.next();
 
         Self {
             tokens,
-            current_token,
-            cwd
+            current_token
         }
     }
 
@@ -567,20 +565,47 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         })
     }
 
+    // The only function that has comments because its kinda confusing
+    // Works as cd. you cd to the current dir the source will go to
+    // Basically thats it.
+    // Idk why even this exists but yeah.
     fn parse_source(&mut self) -> ParserResult<Node> {
         self.advance();
 
-        let file_path = match self.parse_literal() {
-            Ok(Node::Literal(Literals::String(file_name))) => file_name,
+        let cwd = match env::current_dir() {
+            Ok(cwd) => cwd,
+            Err(_) => return Err(ParserError {
+                message: format!("Cannot get the current working directory"),
+                token: None
+            })
+        };
+
+        let source_path = match self.parse_literal() {
+            Ok(Node::Literal(Literals::String(source_path))) => source_path,
             Err(err) => return Err(err),
             _ => unreachable!(),
         };
 
-        let source = match fs::read_to_string(format!("{}/{}", self.cwd, file_path)) {
+        let source_absolute_path = match Path::new(&cwd.join(&source_path)).canonicalize() {
+            Ok(file_path) => file_path,
+            Err(err) => return Err(ParserError {
+                message: format!("Failed to parse file path {:?}: {source_path}", err.to_string()),
+                token: None
+            })
+        };
+
+        if let Err(_) = env::set_current_dir(&source_absolute_path.parent().unwrap()) {
+            return Err(ParserError {
+                message: format!("Failed to change env directory to: {:?}", &source_absolute_path),
+                token: None
+            });
+        }
+
+        let source = match fs::read_to_string(&source_absolute_path) {
             Ok(contents) => contents,
             Err(_) => {
                 return Err(ParserError {
-                    message: format!("Cannot find file {}/{}", self.cwd, file_path),
+                    message: format!("Cannot find file {:?}", &source_absolute_path),
                     token: None,
                 })
             }
@@ -595,18 +620,18 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                         Error while lexing file: {:?}
                         {color_red}[ERROR]{color_reset} -> Lexing Error: {}.
                     "#,
-                        file_path, err.message
+                        source_absolute_path, err.message
                     ),
                     token: None,
                 })
             }
         };
 
-        let ast = Parser::new(tokens.iter().cloned().into_iter(), self.cwd.clone()).parse()?;
+        let ast = Parser::new(tokens.iter().cloned().into_iter()).parse()?;
 
         Ok(Node::Source {
-            cwd: self.cwd.clone(),
-            file_name: file_path,
+            file_name: source_path,
+            cwd: cwd.clone(),
             ast
         })
     }

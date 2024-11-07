@@ -1,5 +1,5 @@
 use crate::parser::{Literals, Node};
-use std::{cell::RefCell, collections::HashMap, mem::discriminant, ops::Deref, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, mem::discriminant, ops::Deref, path::PathBuf, rc::Rc};
 
 macro_rules! compare {
     ($left:expr, $condition:expr, $right:expr) => {
@@ -68,13 +68,15 @@ impl Values {
 struct Env {
     vars: HashMap<String, Values>,
     parent: Option<Rc<RefCell<Env>>>,
+    cwd: PathBuf
 }
 
 impl Env {
-    fn new(parent: Option<Rc<RefCell<Env>>>) -> Self {
+    fn new(parent: Option<Rc<RefCell<Env>>>, cwd: PathBuf) -> Self {
         Env {
             vars: HashMap::new(),
             parent,
+            cwd
         }
     }
 
@@ -103,9 +105,9 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
+    pub fn new(cwd: PathBuf) -> Self {
         Self {
-            env: Rc::new(RefCell::new(Env::new(None))),
+            env: Rc::new(RefCell::new(Env::new(None, cwd))),
         }
     }
 
@@ -159,7 +161,12 @@ impl Interpreter {
             });
         }
 
-        let fn_env = Rc::new(RefCell::new(Env::new(None)));
+        let fn_env = Rc::new(RefCell::new(
+            Env::new(
+                None,
+                self.env.borrow().cwd.clone()
+            )
+        ));
 
         for (fn_arg, arg) in fn_args.deref().into_iter().zip(args.deref().into_iter()) {
             if let Node::Identifier(fn_arg) = fn_arg.deref() {
@@ -185,7 +192,7 @@ impl Interpreter {
         Ok(Values::None)
     }
 
-    fn handle_source(&mut self, ast: &Vec<Node>) -> InterpreterResult<Values> {
+    fn handle_source(&mut self, _file_name: &String, _cwd: &PathBuf, ast: &Vec<Node>) -> InterpreterResult<Values> {
         for node in ast {
             self.exec_node(node)?;
         }
@@ -194,7 +201,13 @@ impl Interpreter {
     }
 
     fn handle_scope(&mut self, body: &Vec<Box<Node>>) -> InterpreterResult<Values> {
-        let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
+        let new_env = Rc::new(RefCell::new(
+            Env::new(
+                Some(self.env.clone()),
+                self.env.borrow().cwd.clone()
+            )
+        ));
+
         let prev_env = std::mem::replace(&mut self.env, new_env);
 
         for scope_node in body {
@@ -314,7 +327,13 @@ impl Interpreter {
             }
         };
 
-        let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
+        let new_env = Rc::new(RefCell::new(
+            Env::new(
+                Some(self.env.clone()),
+                self.env.borrow().cwd.clone()
+            )
+        ));
+
         let prev_env = std::mem::replace(&mut self.env, new_env);
 
         if condition {
@@ -365,7 +384,13 @@ impl Interpreter {
             }
         };
 
-        let new_env = Rc::new(RefCell::new(Env::new(Some(self.env.clone()))));
+        let new_env = Rc::new(RefCell::new(
+            Env::new(
+                Some(self.env.clone()),
+                self.env.borrow().cwd.clone()
+            )
+        ));
+
         let prev_env = std::mem::replace(&mut self.env, new_env);
 
         while condition {
@@ -419,7 +444,7 @@ impl Interpreter {
             Node::Function { identifier, args, scope }  => self.handle_fn(identifier, args, scope),
             Node::FunctionCall { identifier, args }     => self.handle_fn_call(identifier, args),
             Node::Return(value)                         => self.handle_ret(value),
-            Node::Source { ast, .. }                    => self.handle_source(ast),
+            Node::Source { file_name, cwd, ast }        => self.handle_source(file_name, cwd, ast),
             Node::Scope { body }                        => self.handle_scope(body),
             Node::Var { identifier, value }             => self.handle_var(identifier, value),
             Node::Update { identifier, value }          => self.handle_update(identifier, value),
