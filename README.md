@@ -12,6 +12,25 @@ set count 10
 logl msg count # The apple count is: 10
 ```
 
+### Data Types
+
+```bash
+set int 64
+set str "Hello, World"
+set bool true
+set arr [1 2 3 4]
+```
+
+### Math
+
+```bash
+set num1 32
+set num2 32
+set result @math(num1 + num2)
+
+logl result # 64
+```
+
 ### Conditional
 
 ```bash
@@ -24,6 +43,7 @@ check a < b {
 ```
 
 ### While loop
+
 ```bash
 while true {
   logl "loop"
@@ -31,6 +51,7 @@ while true {
 ```
 
 ### Function
+
 ```bash
 fn get {
   ret "foobar"
@@ -45,12 +66,15 @@ set msg @get
 ```
 
 ### Sourcing
+
 ```bash
 # utils.aspl
 fn util_foo {
   logl "foo bar"
 }
+```
 
+```bash
 # main.aspl
 @source "./utils.aspl"
 
