@@ -389,37 +389,6 @@ impl Interpreter {
     }
 
     fn handle_check(&mut self, condition: &Box<Node>, scope: &Box<Node>) -> InterpreterResult<Values> {
-        let condition = match condition.deref() {
-            Node::Condition { left, condition, right } => {
-                let left_value = self.handle_value(left.deref())?;
-                let right_value = self.handle_value(right.deref())?;
-
-                match (left_value, right_value) {
-                    (Values::Integer(left_int), Values::Integer(right_int))         => compare!(left_int, condition, right_int),
-                    (Values::String(left_str), Values::String(right_str))           => compare!(left_str, condition, right_str),
-                    (Values::Boolean(left_boolean), Values::Boolean(right_boolean)) => compare!(left_boolean, condition, right_boolean),
-                    _ => {
-                        return Err(InterpreterError {
-                            r#type: ErrorTypes::TypeError,
-                            message: format!("Cannot compare {:?} to {:?}", left, right),
-                        })
-                    }
-                }
-            }
-            Node::Literal(literal) => match literal {
-                Literals::Int(integer)      => *integer > 0,
-                Literals::String(str)       => str.len() > 0,
-                Literals::Boolean(boolean)  => *boolean,
-                Literals::Array(values)     => values.len() > 0,
-            },
-            _ => {
-                return Err(InterpreterError {
-                    r#type: ErrorTypes::UnknownError,
-                    message: format!("Something went wrong in handle_check"),
-                })
-            }
-        };
-
         let new_env = Rc::new(RefCell::new(
             Env::new(
                 Some(self.env.clone()),
@@ -429,12 +398,14 @@ impl Interpreter {
 
         let prev_env = std::mem::replace(&mut self.env, new_env);
 
-        if condition {
-            if let Node::Scope { body } = scope.deref() {
-                for scope_node in body {
-                    let ret_value = self.exec_node(scope_node.deref())?;
-                    if !ret_value.is_none() {
-                        return Ok(ret_value);
+        if let Values::Boolean(condition) = self.handle_condition(condition)? {
+            if condition {
+                if let Node::Scope { body } = scope.deref() {
+                    for scope_node in body {
+                        let ret_value = self.exec_node(scope_node.deref())?;
+                        if !ret_value.is_none() {
+                            return Ok(ret_value);
+                        }
                     }
                 }
             }
@@ -446,37 +417,6 @@ impl Interpreter {
     }
 
     fn handle_while(&mut self, condition: &Box<Node>, scope: &Box<Node>) -> InterpreterResult<Values> {
-        let condition = match condition.deref() {
-            Node::Condition { left, condition, right } => {
-                let left_value = self.handle_value(left.deref())?;
-                let right_value = self.handle_value(right.deref())?;
-
-                match (left_value, right_value) {
-                    (Values::Integer(left_int), Values::Integer(right_int))         => compare!(left_int, condition, right_int),
-                    (Values::String(left_str), Values::String(right_str))           => compare!(left_str, condition, right_str),
-                    (Values::Boolean(left_boolean), Values::Boolean(right_boolean)) => compare!(left_boolean, condition, right_boolean),
-                    _ => {
-                        return Err(InterpreterError {
-                            r#type: ErrorTypes::TypeError,
-                            message: format!("Cannot compare {:?} to {:?}", left, right),
-                        })
-                    }
-                }
-            }
-            Node::Literal(literal) => match literal {
-                Literals::Int(integer)      => *integer > 0,
-                Literals::String(str)       => str.len() > 0,
-                Literals::Boolean(boolean)  => *boolean,
-                Literals::Array(values)     => values.len() > 0,
-            },
-            _ => {
-                return Err(InterpreterError {
-                    r#type: ErrorTypes::UnknownError,
-                    message: format!("Something went wrong in handle_while"),
-                })
-            }
-        };
-
         let new_env = Rc::new(RefCell::new(
             Env::new(
                 Some(self.env.clone()),
@@ -486,7 +426,11 @@ impl Interpreter {
 
         let prev_env = std::mem::replace(&mut self.env, new_env);
 
-        while condition {
+        while let Values::Boolean(condition) = self.handle_condition(condition)? {
+            if !condition {
+                break;
+            }
+
             if let Node::Scope { body } = scope.deref() {
                 for scope_node in body {
                     let ret_value = self.exec_node(scope_node.deref())?;
@@ -530,6 +474,39 @@ impl Interpreter {
                 r#type: ErrorTypes::UnknownError,
                 message: format!("Something went wrong while handling value"),
             }),
+        }
+    }
+
+    fn handle_condition(&mut self, condition: &Box<Node>) -> InterpreterResult<Values> {
+        match condition.deref() {
+            Node::Condition { left, condition, right } => {
+                let left_value = self.handle_value(left.deref())?;
+                let right_value = self.handle_value(right.deref())?;
+
+                match (left_value, right_value) {
+                    (Values::Integer(left_int), Values::Integer(right_int))         => Ok(Values::Boolean(compare!(left_int, condition, right_int))),
+                    (Values::String(left_str), Values::String(right_str))           => Ok(Values::Boolean(compare!(left_str, condition, right_str))),
+                    (Values::Boolean(left_boolean), Values::Boolean(right_boolean)) => Ok(Values::Boolean(compare!(left_boolean, condition, right_boolean))),
+                    _ => {
+                        return Err(InterpreterError {
+                            r#type: ErrorTypes::TypeError,
+                            message: format!("Cannot compare {:?} to {:?}", left, right),
+                        })
+                    }
+                }
+            }
+            Node::Literal(literal) => match literal {
+                Literals::Int(integer)      => Ok(Values::Boolean(*integer > 0)),
+                Literals::String(str)       => Ok(Values::Boolean(str.len() > 0)),
+                Literals::Boolean(boolean)  => Ok(Values::Boolean(*boolean)),
+                Literals::Array(values)     => Ok(Values::Boolean(values.len() > 0)),
+            },
+            _ => {
+                return Err(InterpreterError {
+                    r#type: ErrorTypes::UnknownError,
+                    message: format!("Something went wrong in handle_while"),
+                })
+            }
         }
     }
 
