@@ -14,6 +14,12 @@ pub enum TokenTypes {
     LThanEq,
     AND,
     OR,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    OpenParen,
+    CloseParen,
     OpenCurly,
     CloseCurly,
     OpenBracket,
@@ -23,6 +29,8 @@ pub enum TokenTypes {
 impl TokenTypes {
     pub fn is_statement(&self)      -> bool { matches!(self, TokenTypes::Statement) }
     pub fn is_identifier(&self)     -> bool { matches!(self, TokenTypes::Identifier) }
+    pub fn is_open_paren(&self)     -> bool { matches!(self, TokenTypes::OpenParen) }
+    pub fn is_close_paren(&self)    -> bool { matches!(self, TokenTypes::CloseParen) }
     pub fn is_open_curly(&self)     -> bool { matches!(self, TokenTypes::OpenCurly) }
     pub fn is_close_curly(&self)    -> bool { matches!(self, TokenTypes::CloseCurly) }
     pub fn is_open_bracket(&self)   -> bool { matches!(self, TokenTypes::OpenBracket) }
@@ -45,6 +53,15 @@ impl TokenTypes {
             TokenTypes::GThanEq |
             TokenTypes::LThan |
             TokenTypes::LThanEq
+        );
+    }
+
+    pub fn is_math_op(&self) -> bool {
+        return matches!(self,
+            TokenTypes::Add |
+            TokenTypes::Sub |
+            TokenTypes::Mul |
+            TokenTypes::Div
         );
     }
 }
@@ -213,6 +230,14 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
             '&' if self.peek().unwrap_or_default() == '&' => Some(TokenTypes::AND),
             '|' if self.peek().unwrap_or_default() == '|' => Some(TokenTypes::OR),
 
+            '+' => Some(TokenTypes::Add),
+            '-' => Some(TokenTypes::Sub),
+            '*' => Some(TokenTypes::Mul),
+            '/' => Some(TokenTypes::Div),
+
+            '(' => Some(TokenTypes::OpenParen),
+            ')' => Some(TokenTypes::CloseParen),
+
             '{' => Some(TokenTypes::OpenCurly),
             '}' => Some(TokenTypes::CloseCurly),
 
@@ -237,7 +262,7 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
 
             return Ok(Token {
                 r#type: token_type,
-                value: None,
+                value: Some(char.to_string()),
                 line: self.line,
                 col: self.col
             });

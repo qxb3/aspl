@@ -17,6 +17,7 @@ macro_rules! compare {
 
 #[derive(Debug)]
 pub enum ErrorTypes {
+    MathError,
     UnknownError,
     TypeError,
     UndefinedVar,
@@ -217,6 +218,98 @@ impl Interpreter {
         self.env = prev_env;
 
         Ok(Values::None)
+    }
+
+    fn handle_math(&mut self, left: &Box<Node>, op: &String, right: &Box<Node>) -> InterpreterResult<Values> {
+        let left_value = match left.deref() {
+            Node::Literal(literal) => match literal {
+                Literals::Int(integer) => integer.clone(),
+                _ => return Err(InterpreterError {
+                    r#type: ErrorTypes::TypeError,
+                    message: format!("Cannot do math on {:?}", literal.name())
+                })
+            },
+            Node::Identifier(identifier) => {
+                let variable = self.env.borrow().get(identifier.as_str())?;
+
+                match variable {
+                    Values::Integer(integer) => integer,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot do math on {:?}", variable)
+                    })
+                }
+            },
+            Node::MathExpr { left, op, right } => {
+                let nested_result = self.handle_math(left, op, right)?;
+                match nested_result {
+                    Values::Integer(value) => value,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot do math on {:?}", nested_result),
+                    }),
+                }
+            },
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Cannot do math on {:?}", left)
+            })
+        };
+
+        let right_value = match right.deref() {
+            Node::Literal(literal) => match literal {
+                Literals::Int(integer) => integer.clone(),
+                _ => return Err(InterpreterError {
+                    r#type: ErrorTypes::TypeError,
+                    message: format!("Cannot do math on {:?}", literal.name())
+                })
+            },
+            Node::Identifier(identifier) => {
+                let variable = self.env.borrow().get(identifier.as_str())?;
+
+                match variable {
+                    Values::Integer(integer) => integer,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot do math on {:?}", variable)
+                    })
+                }
+            },
+            Node::MathExpr { left, op, right } => {
+                let nested_result = self.handle_math(left, op, right)?;
+                match nested_result {
+                    Values::Integer(value) => value,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot do math on {:?}", nested_result),
+                    }),
+                }
+            },
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Cannot do math on {:?}", left)
+            })
+        };
+
+        match op.as_str() {
+            "+" => Ok(Values::Integer(left_value + right_value)),
+            "-" => Ok(Values::Integer(left_value - right_value)),
+            "*" => Ok(Values::Integer(left_value * right_value)),
+            "/" => {
+                if right_value == 0 {
+                    return Err(InterpreterError {
+                        r#type: ErrorTypes::MathError,
+                        message: "Division by zero".to_string(),
+                    })
+                }
+
+                Ok(Values::Integer(left_value / right_value))
+            },
+            _ => Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Unknown operator: {}", op),
+            }),
+        }
     }
 
     fn handle_var(&mut self, identifier: &Box<Node>, value: &Box<Node>) -> InterpreterResult<Values> {
@@ -430,8 +523,9 @@ impl Interpreter {
 
                 Ok(Values::Array(parsed_values))
             }
-            Node::Identifier(identifier) => self.env.borrow().get(identifier.as_str()),
-            Node::FunctionCall { identifier, args } => self.handle_fn_call(identifier, args),
+            Node::Identifier(identifier)                => self.env.borrow().get(identifier.as_str()),
+            Node::FunctionCall { identifier, args }     => self.handle_fn_call(identifier, args),
+            Node::MathExpr { left, op, right }          => self.handle_math(left, op, right),
             _ => Err(InterpreterError {
                 r#type: ErrorTypes::UnknownError,
                 message: format!("Something went wrong while handling value"),
@@ -446,6 +540,7 @@ impl Interpreter {
             Node::Return(value)                         => self.handle_ret(value),
             Node::Source { file_name, cwd, ast }        => self.handle_source(file_name, cwd, ast),
             Node::Scope { body }                        => self.handle_scope(body),
+            Node::MathExpr { left, op, right }          => self.handle_math(left, op, right),
             Node::Var { identifier, value }             => self.handle_var(identifier, value),
             Node::Update { identifier, value }          => self.handle_update(identifier, value),
             Node::Check { condition, scope }            => self.handle_check(condition, scope),

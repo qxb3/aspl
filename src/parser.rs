@@ -10,16 +10,16 @@ pub enum Literals {
     Array(Vec<Literals>)
 }
 
-// impl Literals {
-//     pub fn name(&self) -> &str {
-//         match self {
-//             Literals::Int(_) => "int",
-//             Literals::String(_) => "string",
-//             Literals::Boolean(_) => "boolean",
-//             Literals::Array(_) => "array"
-//         }
-//     }
-// }
+impl Literals {
+    pub fn name(&self) -> &str {
+        match self {
+            Literals::Int(_) => "int",
+            Literals::String(_) => "string",
+            Literals::Boolean(_) => "boolean",
+            Literals::Array(_) => "array"
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Node {
@@ -33,6 +33,11 @@ pub enum Node {
     Condition {
         left: Box<Node>,
         condition: String,
+        right: Box<Node>
+    },
+    MathExpr {
+        left: Box<Node>,
+        op: String,
         right: Box<Node>
     },
     Scope {
@@ -487,7 +492,6 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             }
         };
 
-        // Advance from condition
         self.advance();
 
         let right = match &self.current_token {
@@ -516,6 +520,177 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         })
     }
 
+    fn parse_math_expr(&mut self) -> ParserResult<Node> {
+        self.advance();
+
+        let mut stack: Vec<Token> = vec![];
+        let mut tokens: Vec<Token> = vec![];
+
+        let token = match &self.current_token {
+            Some(token) if token.r#type.is_open_paren() => token.clone(),
+            Some(token) => return Err(ParserError {
+                message: format!("Expected an open parenthesis on @math, but found: {:?}", token.r#type),
+                token: Some(token.clone()),
+            }),
+            None => return Err(ParserError {
+                message: "Unexpected end of input, expected '('".to_string(),
+                token: None,
+            }),
+        };
+
+        stack.push(token);
+        self.advance();
+
+        while let Some(token) = &self.current_token {
+            if token.r#type.is_close_paren() && stack.len() == 1 {
+                stack.pop();
+                self.advance();
+                break;
+            }
+
+            if token.r#type.is_close_paren() {
+                if stack.is_empty() || !stack.last().unwrap().r#type.is_open_paren() {
+                    return Err(ParserError {
+                        message: "Mismatched parentheses".to_string(),
+                        token: Some(token.clone()),
+                    });
+                }
+                stack.pop();
+                tokens.push(token.clone());
+                self.advance();
+
+                continue;
+            }
+
+            match token {
+                token if token.r#type.is_math_op() ||
+                        token.r#type.is_literal()  ||
+                        token.r#type.is_identifier() => tokens.push(token.clone()),
+
+                token if token.r#type.is_open_paren() => {
+                    stack.push(token.clone());
+                    tokens.push(token.clone());
+                }
+
+                _ => return Err(ParserError {
+                    message: format!("Unexpected token in math expression: {:?}", token.r#type),
+                    token: Some(token.clone()),
+                }),
+            }
+
+            self.advance();
+        }
+
+        if !stack.is_empty() {
+            return Err(ParserError {
+                message: "Unmatched open parenthesis".to_string(),
+                token: stack.last().cloned(),
+            });
+        }
+
+        Ok(self.math_parse(tokens)?)
+    }
+
+    fn math_parse(&mut self, tokens: Vec<Token>) -> ParserResult<Node> {
+        let mut output_stack: Vec<Node> = vec![];
+        let mut operator_stack: Vec<String> = vec![];
+
+        let mut i = 0;
+
+        while i < tokens.len() {
+            let token = &tokens[i];
+
+            match &token {
+                token if token.r#type.is_literal() => {
+                    output_stack.push(Node::Literal(Literals::Int(token.value.clone().unwrap().parse().unwrap())));
+                },
+                token if token.r#type.is_identifier() => {
+                    output_stack.push(Node::Identifier(token.value.clone().unwrap()));
+                }
+                token if token.r#type.is_math_op() => {
+                    let op = token.value.clone().unwrap();
+
+                    while !operator_stack.is_empty() &&
+                        self.math_precedence(&operator_stack.last().unwrap()) >= self.math_precedence(&op)
+                    {
+                        let top_op = operator_stack.last().unwrap();
+                        if (top_op == "+" || top_op == "-") && (op == "*" || op == "/") {
+                            break;
+                        }
+
+                        let operator = operator_stack.pop().unwrap();
+                        let right = output_stack.pop().unwrap();
+                        let left = output_stack.pop().unwrap();
+
+                        output_stack.push(Node::MathExpr {
+                            left: Box::new(left),
+                            op: operator,
+                            right: Box::new(right),
+                        });
+                    }
+                    operator_stack.push(op);
+                },
+
+                token if token.r#type.is_open_paren() => {
+                    operator_stack.push("(".to_string());
+                },
+
+                token if token.r#type.is_close_paren() => {
+                    while operator_stack.last().unwrap() != "(" {
+                        let operator = operator_stack.pop().unwrap();
+                        let right = output_stack.pop().unwrap();
+                        let left = output_stack.pop().unwrap();
+
+                        output_stack.push(Node::MathExpr {
+                            left: Box::new(left),
+                            op: operator,
+                            right: Box::new(right),
+                        });
+                    }
+                    operator_stack.pop();
+                },
+
+                _ => {
+                    return Err(ParserError {
+                        message: format!("Unexpected token: {:?}", token.r#type),
+                        token: Some(token.clone()),
+                    });
+                }
+            }
+
+            i += 1;
+        }
+
+        while !operator_stack.is_empty() {
+            let operator = operator_stack.pop().unwrap();
+            let right = output_stack.pop().unwrap();
+            let left = output_stack.pop().unwrap();
+
+            output_stack.push(Node::MathExpr {
+                left: Box::new(left),
+                op: operator,
+                right: Box::new(right),
+            });
+        }
+
+        if output_stack.len() != 1 {
+            return Err(ParserError {
+                message: "Unexpected number of nodes in output stack".to_string(),
+                token: None,
+            })
+        }
+
+        Ok(output_stack.pop().unwrap())
+    }
+
+    fn math_precedence(&self, op: &str) -> i64 {
+        match op {
+            "+" | "-" => 1,
+            "*" | "/" => 2,
+            _ => 0,
+        }
+    }
+
     fn parse_scope(&mut self) -> ParserResult<Node> {
         self.advance();
 
@@ -536,7 +711,19 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
     fn parse_function_call(&mut self) -> ParserResult<Node> {
         let identifier = match &self.current_token {
-            Some(token) => Node::Identifier(token.clone().value.unwrap_or_default()),
+            Some(token) => {
+                if let Some(fn_call_name) = &token.value {
+                    if fn_call_name == "source" {
+                        return self.parse_source();
+                    }
+
+                    if fn_call_name == "math" {
+                        return self.parse_math_expr();
+                    }
+                }
+
+                Node::Identifier(token.clone().value.unwrap_or_default())
+            }
             None => {
                 return Err(ParserError {
                     message: format!("Unexpected end of input while parsing function call"),
@@ -650,12 +837,6 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
             // Check & Parse Import/Fn_Call
             if token.r#type.is_fn_call() {
-                if let Some(fn_call_name) = &token.value {
-                    if fn_call_name == "source" {
-                        return self.parse_source();
-                    }
-                }
-
                 return self.parse_function_call();
             }
 
