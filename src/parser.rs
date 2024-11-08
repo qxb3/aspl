@@ -30,6 +30,10 @@ pub enum Node {
         identifier: Box<Node>,
         value: Box<Node>
     },
+    ArrayAccess {
+        identifier: Box<Node>,
+        index: usize
+    },
     Condition {
         left: Box<Node>,
         condition: String,
@@ -110,8 +114,12 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             Some(node) => match node {
                 node if node.r#type.is_literal() ||
                         node.r#type.is_open_bracket()   => self.parse_literal()?,
-                node if node.r#type.is_identifier()     => self.parse_identifier()?,
                 node if node.r#type.is_fn_call()        => self.parse_function_call()?,
+                node if node.r#type.is_identifier() &&
+                        self.peek().is_some() &&
+                        self.peek().unwrap()
+                            .r#type.is_open_bracket()   => self.parse_array_access()?,
+                node if node.r#type.is_identifier()     => self.parse_identifier()?,
                 _ => {
                     return Err(ParserError {
                         message: format!(
@@ -446,6 +454,51 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         Err(ParserError {
             message: format!("Unexpected end of input while parsing identifier"),
             token: None,
+        })
+    }
+
+    fn parse_array_access(&mut self) -> ParserResult<Node> {
+        let identifier = self.parse_identifier()?;
+
+        if let Some(token) = &self.current_token {
+            if !token.r#type.is_open_bracket() {
+                return Err(ParserError {
+                    message: format!("Expected open bracket, but found: {:?}", token.r#type),
+                    token: Some(token.clone())
+                });
+            }
+
+            self.advance();
+        }
+
+        let index = match &self.current_token {
+            Some(token) if token.r#type.is_literal() => token.value.clone().unwrap().parse::<usize>().unwrap(),
+            Some(token) => return Err(ParserError {
+                message: format!("Expected a index, but found {:?}", token.r#type),
+                token: None
+            }),
+            None => return Err(ParserError {
+                message: format!("Unexpected end of input while parsing array access"),
+                token: None
+            })
+        };
+
+        self.advance();
+
+        if let Some(token) = &self.current_token {
+            if !token.r#type.is_close_bracket() {
+                return Err(ParserError {
+                    message: format!("Expected close bracket, but found: {:?}", token.r#type),
+                    token: Some(token.clone())
+                });
+            }
+
+            self.advance();
+        }
+
+        Ok(Node::ArrayAccess {
+            identifier: Box::new(identifier),
+            index
         })
     }
 
@@ -826,8 +879,17 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
     // Parse all expressions
     fn parse_expr(&mut self) -> ParserResult<Node> {
         if let Some(token) = &self.current_token {
+            // Check & Parse Array Access
+            if token.r#type.is_identifier() {
+                if let Some(condition) = self.peek() {
+                    if condition.r#type.is_open_bracket() {
+                        return self.parse_array_access();
+                    }
+                }
+            }
+
+            // Check & Parse Condition
             if token.r#type.is_literal() || token.r#type.is_identifier() {
-                // Check & Parse Condition
                 if let Some(condition) = self.peek() {
                     if condition.r#type.is_condition_op() {
                         return self.parse_condition();

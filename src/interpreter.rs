@@ -17,6 +17,7 @@ macro_rules! compare {
 
 #[derive(Debug)]
 pub enum ErrorTypes {
+    IndexOutOfBounds,
     MathError,
     UnknownError,
     TypeError,
@@ -324,6 +325,31 @@ impl Interpreter {
         Ok(Values::None)
     }
 
+    fn handle_array_acces(&mut self, identifier: &Box<Node>, index: &usize) -> InterpreterResult<Values> {
+        let name = match identifier.deref() {
+            Node::Identifier(identifier) => identifier,
+            _ => unreachable!(),
+        };
+
+        let array = match self.env.borrow().get(&name)? {
+            Values::Array(array) => array,
+            _ => return Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Cannot access {:?}. {:?} is not a array", name, name)
+            })
+        };
+
+        let value = match array.get(index.to_owned()) {
+            Some(value) => value,
+            None => return Err(InterpreterError {
+                r#type: ErrorTypes::IndexOutOfBounds,
+                message: format!("Cannot access {}[{}]", name, index)
+            })
+        };
+
+        Ok(value.clone())
+    }
+
     fn handle_update(&mut self, identifier: &Box<Node>, value: &Box<Node>) -> InterpreterResult<Values> {
         let name = match identifier.deref() {
             Node::Identifier(identifier) => identifier,
@@ -467,6 +493,7 @@ impl Interpreter {
 
                 Ok(Values::Array(parsed_values))
             }
+            Node::ArrayAccess { identifier, index }     => self.handle_array_acces(identifier, index),
             Node::Identifier(identifier)                => self.env.borrow().get(identifier.as_str()),
             Node::FunctionCall { identifier, args }     => self.handle_fn_call(identifier, args),
             Node::MathExpr { left, op, right }          => self.handle_math(left, op, right),
