@@ -26,6 +26,7 @@ pub enum Node {
     Literal(Literals),
     Identifier(String),
     Return(Box<Node>),
+    Break,
     Var {
         identifier: Box<Node>,
         value: Box<Node>
@@ -289,6 +290,12 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         })
     }
 
+    fn parse_break(&mut self) -> ParserResult<Node> {
+        self.advance();
+
+        Ok(Node::Break)
+    }
+
     fn parse_function(&mut self) -> ParserResult<Node> {
         self.advance();
 
@@ -361,6 +368,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                 "while"         => return self.parse_while_statement(),
                 "fn"            => return self.parse_function(),
                 "ret"           => return self.parse_return(),
+                "break"         => return self.parse_break(),
 
                 _ => {
                     return Err(ParserError {

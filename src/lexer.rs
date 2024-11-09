@@ -168,7 +168,8 @@ impl<T: Iterator<Item = char> + Clone> Lexer<T> {
             "log"   | "logl"    |
             "set"   | "update"  |
             "check" | "while"   |
-            "fn"    | "ret" => Token {
+            "fn"    | "ret"     |
+            "break" => Token {
                 r#type: TokenTypes::Statement,
                 value: Some(buffer.to_owned()),
                 line: self.line,

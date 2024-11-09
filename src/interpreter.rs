@@ -45,12 +45,12 @@ enum Values {
         scope: Box<Node>,
     },
     None,
+    Break
 }
 
 impl Values {
-    fn is_none(&self) -> bool {
-        matches!(self, Values::None)
-    }
+    fn is_none(&self)   -> bool { matches!(self, Values::None) }
+    fn is_break(&self)  -> bool { matches!(self, Values::Break) }
 
     fn name(&self) -> String {
         match self {
@@ -63,6 +63,7 @@ impl Values {
                 ..
             }                           => identifier.to_string(),
             Values::None                => "None".to_string(),
+            Values::Break               => "Break".to_string(),
         }
     }
 }
@@ -488,6 +489,10 @@ impl Interpreter {
             if condition {
                 if let Node::Scope { body } = scope.deref() {
                     for scope_node in body {
+                        if let Node::Break = scope_node.deref() {
+                            return Ok(Values::Break)
+                        }
+
                         let ret_value = self.exec_node(scope_node.deref())?;
                         if !ret_value.is_none() {
                             return Ok(ret_value);
@@ -519,7 +524,15 @@ impl Interpreter {
 
             if let Node::Scope { body } = scope.deref() {
                 for scope_node in body {
+                    if let Node::Break = scope_node.deref() {
+                        return Ok(Values::None);
+                    }
+
                     let ret_value = self.exec_node(scope_node.deref())?;
+                    if ret_value.is_break() {
+                        return Ok(Values::None);
+                    }
+
                     if !ret_value.is_none() {
                         return Ok(ret_value);
                     }
