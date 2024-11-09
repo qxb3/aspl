@@ -373,58 +373,70 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         })
     }
 
+    fn parse_array_literal(&mut self) -> ParserResult<Literals> {
+        self.advance();
+
+        let mut values: Vec<Literals> = vec![];
+
+        while let Some(token) = &self.current_token {
+            if token.r#type.is_close_bracket() {
+                self.advance();
+                break;
+            }
+
+            let value: Literals = match token.r#type {
+                TokenTypes::IntLiteral      => Literals::Int(token.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::StringLiteral   => Literals::String(token.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::BooleanLiteral  => Literals::Boolean(token.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::OpenBracket     => self.parse_array_literal()?,
+                _ => {
+                    return Err(ParserError {
+                        message: format!(
+                            "Expected a literal, but found {:?}",
+                            token.r#type
+                        ),
+                        token: Some(self.current_token.clone().unwrap()),
+                    })
+                }
+            };
+
+            if matches!(value,
+                Literals::Int(_) |
+                Literals::String(_) |
+                Literals::Boolean(_)) {
+                self.advance();
+            }
+
+            values.push(value);
+        }
+
+        if !values.iter().all(|value| discriminant(value) == discriminant(&values[0])) {
+            return Err(ParserError {
+                message: format!("Cannot have two or more types in array"),
+                token: Some(self.current_token.clone().unwrap()),
+            });
+        }
+
+        Ok(Literals::Array(values))
+    }
+
     fn parse_literal(&mut self) -> ParserResult<Node> {
         if let Some(token) = &self.current_token.clone() {
             let value: Literals = match token.r#type {
-                TokenTypes::IntLiteral => Literals::Int(token.value.clone().unwrap().parse().unwrap()),
-                TokenTypes::StringLiteral => Literals::String(token.value.clone().unwrap().parse().unwrap()),
-                TokenTypes::BooleanLiteral => Literals::Boolean(token.value.clone().unwrap().parse().unwrap()),
-                TokenTypes::OpenBracket => {
-                    self.advance();
-
-                    let mut values: Vec<Literals> = vec![];
-
-                    while let Some(token) = &self.current_token.clone() {
-                        if token.r#type.is_close_bracket() {
-                            self.advance();
-                            break;
-                        }
-
-                        let value: Literals = match token.r#type {
-                            TokenTypes::IntLiteral => Literals::Int(token.value.clone().unwrap().parse().unwrap()),
-                            TokenTypes::StringLiteral => Literals::String(token.value.clone().unwrap().parse().unwrap()),
-                            TokenTypes::BooleanLiteral => Literals::Boolean(token.value.clone().unwrap().parse().unwrap()),
-                            _ => {
-                                return Err(ParserError {
-                                    message: format!(
-                                        "Expected a literal, but found {:?}",
-                                        token.r#type
-                                    ),
-                                    token: Some(token.clone()),
-                                })
-                            }
-                        };
-
-                        values.push(value);
-                        self.advance();
-                    }
-
-                    if !values.iter().all(|value| discriminant(value) == discriminant(&values[0])) {
-                        return Err(ParserError {
-                            message: format!("Cannot have two or more types in array"),
-                            token: Some(token.clone()),
-                        });
-                    }
-
-                    Literals::Array(values)
-                }
+                TokenTypes::IntLiteral      => Literals::Int(token.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::StringLiteral   => Literals::String(token.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::BooleanLiteral  => Literals::Boolean(token.value.clone().unwrap().parse().unwrap()),
+                TokenTypes::OpenBracket     => self.parse_array_literal()?,
                 _ => return Err(ParserError {
                     message: format!("Expected a literal, but found {:?}", token.r#type),
                     token: Some(token.clone()),
                 })
             };
 
-            if token.r#type.is_literal() {
+            if matches!(value,
+                Literals::Int(_) |
+                Literals::String(_) |
+                Literals::Boolean(_)) {
                 self.advance();
             }
 
@@ -458,48 +470,52 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
     }
 
     fn parse_array_access(&mut self) -> ParserResult<Node> {
-        let identifier = self.parse_identifier()?;
+        let mut current_identifier = self.parse_identifier()?;
 
-        if let Some(token) = &self.current_token {
+        while let Some(token) = &self.current_token {
             if !token.r#type.is_open_bracket() {
-                return Err(ParserError {
-                    message: format!("Expected open bracket, but found: {:?}", token.r#type),
-                    token: Some(token.clone())
-                });
+                break;
             }
 
             self.advance();
-        }
 
-        let index = match &self.current_token {
-            Some(token) if token.r#type.is_literal() => token.value.clone().unwrap().parse::<usize>().unwrap(),
-            Some(token) => return Err(ParserError {
-                message: format!("Expected a index, but found {:?}", token.r#type),
-                token: None
-            }),
-            None => return Err(ParserError {
-                message: format!("Unexpected end of input while parsing array access"),
-                token: None
-            })
-        };
+            let index = match &self.current_token {
+                Some(token) if token.r#type.is_literal() => token.value.clone().unwrap().parse::<usize>().unwrap(),
+                Some(token) => return Err(ParserError {
+                    message: format!("Expected an index, but found {:?}", token.r#type),
+                    token: None,
+                }),
+                None => return Err(ParserError {
+                    message: "Unexpected end of input while parsing array access".to_string(),
+                    token: None,
+                })
+            };
 
-        self.advance();
+            self.advance();
 
-        if let Some(token) = &self.current_token {
-            if !token.r#type.is_close_bracket() {
+            if let Some(token) = &self.current_token {
+                if !token.r#type.is_close_bracket() {
+                    return Err(ParserError {
+                        message: format!("Expected close bracket, but found: {:?}", token.r#type),
+                        token: Some(token.clone()),
+                    });
+                }
+
+                self.advance();
+            } else {
                 return Err(ParserError {
-                    message: format!("Expected close bracket, but found: {:?}", token.r#type),
-                    token: Some(token.clone())
+                    message: "Unexpected end of input while parsing array access".to_string(),
+                    token: None,
                 });
             }
 
-            self.advance();
+            current_identifier = Node::ArrayAccess {
+                identifier: Box::new(current_identifier),
+                index,
+            };
         }
 
-        Ok(Node::ArrayAccess {
-            identifier: Box::new(identifier),
-            index
-        })
+        Ok(current_identifier)
     }
 
     fn parse_condition(&mut self) -> ParserResult<Node> {

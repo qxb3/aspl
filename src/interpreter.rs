@@ -325,29 +325,48 @@ impl Interpreter {
         Ok(Values::None)
     }
 
-    fn handle_array_acces(&mut self, identifier: &Box<Node>, index: &usize) -> InterpreterResult<Values> {
-        let name = match identifier.deref() {
-            Node::Identifier(identifier) => identifier,
-            _ => unreachable!(),
-        };
+    fn handle_array_access(&mut self, identifier: &Box<Node>, index: &usize) -> InterpreterResult<Values> {
+        match identifier.deref() {
+            Node::Identifier(name) => {
+                let array = match self.env.borrow().get(&name)? {
+                    Values::Array(array) => array,
+                    _ => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot access {:?}. {:?} is not a array", name, name)
+                    })
+                };
 
-        let array = match self.env.borrow().get(&name)? {
-            Values::Array(array) => array,
-            _ => return Err(InterpreterError {
+                match array.get(index.clone()) {
+                    Some(value) => Ok(value.clone()),
+                    None => return Err(InterpreterError {
+                        r#type: ErrorTypes::IndexOutOfBounds,
+                        message: format!("Cannot access {}[{}]", name, index)
+                    })
+                }
+            },
+            Node::ArrayAccess { identifier: inner_identifier, index: inner_index } => {
+                let inner_value = self.handle_array_access(inner_identifier, inner_index)?;
+
+                if let Values::Array(array) = inner_value {
+                    match array.get(index.clone()) {
+                        Some(value) => Ok(value.clone()),
+                        None => return Err(InterpreterError {
+                            r#type: ErrorTypes::IndexOutOfBounds,
+                            message: format!("Cannot access [{}][{}]", inner_index, index)
+                        })
+                    }
+                } else {
+                    Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Expected an array for nested access but found a non-array value")
+                    })
+                }
+            },
+            _ => Err(InterpreterError {
                 r#type: ErrorTypes::TypeError,
-                message: format!("Cannot access {:?}. {:?} is not a array", name, name)
+                message: format!("Array access expression is invalid"),
             })
-        };
-
-        let value = match array.get(index.to_owned()) {
-            Some(value) => value,
-            None => return Err(InterpreterError {
-                r#type: ErrorTypes::IndexOutOfBounds,
-                message: format!("Cannot access {}[{}]", name, index)
-            })
-        };
-
-        Ok(value.clone())
+        }
     }
 
     fn handle_update(&mut self, identifier: &Box<Node>, value: &Box<Node>) -> InterpreterResult<Values> {
@@ -472,28 +491,30 @@ impl Interpreter {
         Ok(Values::None)
     }
 
+    fn handle_array(&mut self, values: &Vec<Literals>) -> InterpreterResult<Values> {
+        let mut parsed_values: Vec<Values> = vec![];
+
+        for value in values {
+            let value = match value {
+                Literals::Int(integer)      => Values::Integer(integer.clone()),
+                Literals::String(str)       => Values::String(str.clone()),
+                Literals::Boolean(boolean)  => Values::Boolean(boolean.clone()),
+                Literals::Array(values)     => self.handle_array(values)?
+            };
+
+            parsed_values.push(value);
+        }
+
+        Ok(Values::Array(parsed_values))
+    }
+
     fn handle_value(&mut self, node: &Node) -> InterpreterResult<Values> {
         match node {
             Node::Literal(Literals::Int(integer))       => Ok(Values::Integer(integer.clone())),
             Node::Literal(Literals::String(str))        => Ok(Values::String(str.clone())),
             Node::Literal(Literals::Boolean(boolean))   => Ok(Values::Boolean(boolean.clone())),
-            Node::Literal(Literals::Array(values)) => {
-                let mut parsed_values: Vec<Values> = vec![];
-
-                for value in values {
-                    let value = match value {
-                        Literals::Int(integer)      => Values::Integer(integer.clone()),
-                        Literals::String(str)       => Values::String(str.clone()),
-                        Literals::Boolean(boolean)  => Values::Boolean(boolean.clone()),
-                        _ => unreachable!(),
-                    };
-
-                    parsed_values.push(value);
-                }
-
-                Ok(Values::Array(parsed_values))
-            }
-            Node::ArrayAccess { identifier, index }     => self.handle_array_acces(identifier, index),
+            Node::Literal(Literals::Array(values))      => self.handle_array(values),
+            Node::ArrayAccess { identifier, index }     => self.handle_array_access(identifier, index),
             Node::Identifier(identifier)                => self.env.borrow().get(identifier.as_str()),
             Node::FunctionCall { identifier, args }     => self.handle_fn_call(identifier, args),
             Node::MathExpr { left, op, right }          => self.handle_math(left, op, right),

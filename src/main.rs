@@ -2,7 +2,7 @@ mod lexer;
 mod parser;
 mod interpreter;
 
-use std::{env, fs, path::{Path, PathBuf}, process::exit};
+use std::{env, fs, path::PathBuf, process::exit};
 use inline_colorization::*;
 use interpreter::Interpreter;
 use lexer::Lexer;
@@ -85,7 +85,7 @@ fn main() {
         }
     };
 
-    // println!("{:#?}", ast);
+    println!("{:#?}", ast);
 
     let mut interpreter = Interpreter::new(cwd.clone());
     if let Err(err) = interpreter.run(&ast) {
