@@ -67,6 +67,7 @@ impl Values {
     }
 }
 
+#[derive(Debug)]
 struct Env {
     vars: HashMap<String, Values>,
     parent: Option<Rc<RefCell<Env>>>,
@@ -84,6 +85,22 @@ impl Env {
 
     fn set(&mut self, name: &str, value: Values) {
         self.vars.insert(name.to_string(), value);
+    }
+
+    fn update(&mut self, name: &str, value: Values) -> InterpreterResult<Values> {
+        if let Some(var) = self.vars.get_mut(name) {
+            *var = value.clone();
+            return Ok(value.clone())
+        }
+
+        if let Some(ref parent) = self.parent {
+            return parent.borrow_mut().update(name, value.clone());
+        }
+
+        Err(InterpreterError {
+            r#type: ErrorTypes::UndefinedVar,
+            message: format!("Cannot find var: {:?}", name),
+        })
     }
 
     fn get(&self, name: &str) -> InterpreterResult<Values> {
@@ -417,7 +434,7 @@ impl Interpreter {
             Err(err) => return Err(err),
         }
 
-        self.env.borrow_mut().set(name.as_str(), val);
+        self.env.borrow_mut().update(name.as_str(), val)?;
 
         Ok(Values::None)
     }

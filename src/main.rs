@@ -85,7 +85,7 @@ fn main() {
         }
     };
 
-    println!("{:#?}", ast);
+    // println!("{:#?}", ast);
 
     let mut interpreter = Interpreter::new(cwd.clone());
     if let Err(err) = interpreter.run(&ast) {
