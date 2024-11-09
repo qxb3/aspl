@@ -45,6 +45,10 @@ pub enum Node {
         op: String,
         right: Box<Node>
     },
+    Random {
+        start: Box<Node>,
+        end: Box<Node>
+    },
     Scope {
         body: Vec<Box<Node>>
     },
@@ -779,6 +783,53 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         }
     }
 
+    fn parse_rand(&mut self) -> ParserResult<Node> {
+        self.advance();
+
+        let start = match &self.current_token {
+            Some(token) if token.r#type.is_literal() => {
+                let literal = self.parse_literal()?;
+
+                match literal {
+                    Node::Literal(Literals::Int(_)) => literal,
+                    _ => return Err(ParserError {
+                        message: format!("Expected a Int Literal, But found {:?}", self.current_token.clone().unwrap().r#type),
+                        token: Some(self.current_token.clone().unwrap())
+                    })
+                }
+            },
+            Some(token) if token.r#type.is_identifier() => self.parse_identifier()?,
+            _ => return Err(ParserError {
+                message: format!("Expected a Literal or Identifier, But found {:?}", self.current_token.clone().unwrap().r#type),
+                token: Some(self.current_token.clone().unwrap())
+            })
+        };
+
+        let end = match &self.current_token {
+            Some(token) if token.r#type.is_literal() => {
+                let literal = self.parse_literal()?;
+
+                match literal {
+                    Node::Literal(Literals::Int(_)) => literal,
+                    _ => return Err(ParserError {
+                        message: format!("Expected a Int Literal, But found {:?}", self.current_token.clone().unwrap().r#type),
+                        token: Some(self.current_token.clone().unwrap())
+                    })
+                }
+            },
+            Some(token) if token.r#type.is_identifier() => self.parse_identifier()?,
+            _ => return Err(ParserError {
+                message: format!("Expected a Literal or Identifier, But found {:?}", self.current_token.clone().unwrap().r#type),
+                token: Some(self.current_token.clone().unwrap())
+            })
+        };
+
+        Ok(Node::Random {
+            start: Box::new(start),
+            end: Box::new(end)
+        })
+    }
+
     fn parse_scope(&mut self) -> ParserResult<Node> {
         self.advance();
 
@@ -807,6 +858,10 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
                     if fn_call_name == "math" {
                         return self.parse_math_expr();
+                    }
+
+                    if fn_call_name == "rand" {
+                        return self.parse_rand();
                     }
                 }
 

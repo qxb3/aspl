@@ -8,3 +8,4 @@ edition = "2021"
 
 [dependencies]
 inline_colorization = "0.1.6"
+rand = "0.8.5"

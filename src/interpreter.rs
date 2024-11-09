@@ -1,3 +1,5 @@
+use rand::Rng;
+
 use crate::parser::{Literals, Node};
 use std::{cell::RefCell, collections::HashMap, mem::discriminant, ops::Deref, path::PathBuf, rc::Rc, usize};
 
@@ -331,6 +333,29 @@ impl Interpreter {
         }
     }
 
+    fn handle_random(&mut self, start: &Box<Node>, end: &Box<Node>) -> InterpreterResult<Values> {
+        let start = match self.handle_value(start.deref())? {
+            Values::Integer(start) => start,
+            value => return Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Cannot generate a random number based on {:?}", value.name())
+            })
+        };
+
+        let end = match self.handle_value(end.deref())? {
+            Values::Integer(end) => end,
+            value => return Err(InterpreterError {
+                r#type: ErrorTypes::TypeError,
+                message: format!("Cannot generate a random number based on {:?}", value.name())
+            })
+        };
+
+        let mut rng = rand::thread_rng();
+        let generated = rng.gen_range(start..end);
+
+        Ok(Values::Integer(generated))
+    }
+
     fn handle_var(&mut self, identifier: &Box<Node>, value: &Box<Node>) -> InterpreterResult<Values> {
         let name = match identifier.deref() {
             Node::Identifier(identifier) => identifier,
@@ -572,6 +597,7 @@ impl Interpreter {
             Node::Identifier(identifier)                => self.env.borrow().get(identifier.as_str()),
             Node::FunctionCall { identifier, args }     => self.handle_fn_call(identifier, args),
             Node::MathExpr { left, op, right }          => self.handle_math(left, op, right),
+            Node::Random { start, end }                 => self.handle_random(start, end),
             _ => Err(InterpreterError {
                 r#type: ErrorTypes::UnknownError,
                 message: format!("Something went wrong while handling value"),
@@ -620,6 +646,7 @@ impl Interpreter {
             Node::Source { file_name, cwd, ast }        => self.handle_source(file_name, cwd, ast),
             Node::Scope { body }                        => self.handle_scope(body),
             Node::MathExpr { left, op, right }          => self.handle_math(left, op, right),
+            Node::Random { start, end }                 => self.handle_random(start, end),
             Node::Var { identifier, value }             => self.handle_var(identifier, value),
             Node::Update { identifier, value }          => self.handle_update(identifier, value),
             Node::Check { condition, scope }            => self.handle_check(condition, scope),

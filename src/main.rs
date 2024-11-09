@@ -1,7 +1,6 @@
 mod lexer;
 mod parser;
 mod interpreter;
-
 use std::{env, fs, path::PathBuf, process::exit};
 use inline_colorization::*;
 use interpreter::Interpreter;
