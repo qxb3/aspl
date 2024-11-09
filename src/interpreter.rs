@@ -1,5 +1,5 @@
 use crate::parser::{Literals, Node};
-use std::{cell::RefCell, collections::HashMap, mem::discriminant, ops::Deref, path::PathBuf, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, mem::discriminant, ops::Deref, path::PathBuf, rc::Rc, usize};
 
 macro_rules! compare {
     ($left:expr, $condition:expr, $right:expr) => {
@@ -325,7 +325,7 @@ impl Interpreter {
         Ok(Values::None)
     }
 
-    fn handle_array_access(&mut self, identifier: &Box<Node>, index: &usize) -> InterpreterResult<Values> {
+    fn handle_array_access(&mut self, identifier: &Box<Node>, index: &Box<Node>) -> InterpreterResult<Values> {
         match identifier.deref() {
             Node::Identifier(name) => {
                 let array = match self.env.borrow().get(&name)? {
@@ -333,6 +333,14 @@ impl Interpreter {
                     _ => return Err(InterpreterError {
                         r#type: ErrorTypes::TypeError,
                         message: format!("Cannot access {:?}. {:?} is not a array", name, name)
+                    })
+                };
+
+                let index = match self.handle_value(index)? {
+                    Values::Integer(index) => index as usize,
+                    value => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot access {:?} with {:?}", name, value.name())
                     })
                 };
 
@@ -346,6 +354,22 @@ impl Interpreter {
             },
             Node::ArrayAccess { identifier: inner_identifier, index: inner_index } => {
                 let inner_value = self.handle_array_access(inner_identifier, inner_index)?;
+
+                let index = match self.handle_value(index)? {
+                    Values::Integer(index) => index as usize,
+                    value => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot access [{:?}] with {:?}", inner_index, value.name())
+                    })
+                };
+
+                let inner_index = match self.handle_value(inner_index)? {
+                    Values::Integer(inner_index) => inner_index as usize,
+                    value => return Err(InterpreterError {
+                        r#type: ErrorTypes::TypeError,
+                        message: format!("Cannot access [{:?}] with {:?}", inner_index, value.name())
+                    })
+                };
 
                 if let Values::Array(array) = inner_value {
                     match array.get(index.clone()) {

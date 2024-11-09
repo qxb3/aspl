@@ -32,7 +32,7 @@ pub enum Node {
     },
     ArrayAccess {
         identifier: Box<Node>,
-        index: usize
+        index: Box<Node>
     },
     Condition {
         left: Box<Node>,
@@ -187,9 +187,13 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         while let Some(arg) = &self.current_token {
             match arg.r#type {
                 arg if arg.is_literal() ||
-                        arg.is_open_bracket()   => args.push(Box::new(self.parse_literal()?)),
-                arg if arg.is_identifier()      => args.push(Box::new(self.parse_identifier()?)),
-                arg if arg.is_fn_call()         => args.push(Box::new(self.parse_function_call()?)),
+                        arg.is_open_bracket()           => args.push(Box::new(self.parse_literal()?)),
+                arg if arg.is_identifier() &&
+                        self.peek().is_some() &&
+                        self.peek().unwrap()
+                            .r#type.is_open_bracket()   => args.push(Box::new(self.parse_array_access()?)),
+                arg if arg.is_identifier()              => args.push(Box::new(self.parse_identifier()?)),
+                arg if arg.is_fn_call()                 => args.push(Box::new(self.parse_function_call()?)),
                 _ => break,
             }
         }
@@ -251,7 +255,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
         if let Some(token) = &self.current_token {
             if token.r#type.is_literal() || token.r#type.is_identifier() {
                 if let Some(condition) = self.peek() {
-                    if condition.r#type.is_condition_op() {
+                    if condition.r#type.is_condition_op() || condition.r#type.is_open_bracket() {
                         let condition = self.parse_condition()?;
                         let scope = self.parse_scope()?;
 
@@ -480,7 +484,8 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
             self.advance();
 
             let index = match &self.current_token {
-                Some(token) if token.r#type.is_literal() => token.value.clone().unwrap().parse::<usize>().unwrap(),
+                Some(token) if token.r#type.is_literal()        => self.parse_literal()?,
+                Some(token) if token.r#type.is_identifier()     => self.parse_identifier()?,
                 Some(token) => return Err(ParserError {
                     message: format!("Expected an index, but found {:?}", token.r#type),
                     token: None,
@@ -490,8 +495,6 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
                     token: None,
                 })
             };
-
-            self.advance();
 
             if let Some(token) = &self.current_token {
                 if !token.r#type.is_close_bracket() {
@@ -511,7 +514,7 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
             current_identifier = Node::ArrayAccess {
                 identifier: Box::new(current_identifier),
-                index,
+                index: Box::new(index),
             };
         }
 
@@ -521,8 +524,12 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
     fn parse_condition(&mut self) -> ParserResult<Node> {
         let left = match &self.current_token {
             Some(left) => match left {
-                left if left.r#type.is_identifier() => self.parse_identifier()?,
-                left if left.r#type.is_literal() => self.parse_literal()?,
+                node if node.r#type.is_identifier() &&
+                        self.peek().is_some() &&
+                        self.peek().unwrap()
+                            .r#type.is_open_bracket()   => self.parse_array_access()?,
+                left if left.r#type.is_identifier()     => self.parse_identifier()?,
+                left if left.r#type.is_literal()        => self.parse_literal()?,
                 left => {
                     return Err(ParserError {
                         message: format!("Expected a identifier or literal, but found {:?}", left),
@@ -565,8 +572,12 @@ impl<T: Iterator<Item = Token> + Clone> Parser<T> {
 
         let right = match &self.current_token {
             Some(right) => match right {
-                right if right.r#type.is_identifier() => self.parse_identifier()?,
-                right if right.r#type.is_literal() => self.parse_literal()?,
+                node if node.r#type.is_identifier() &&
+                        self.peek().is_some() &&
+                        self.peek().unwrap()
+                            .r#type.is_open_bracket()   => self.parse_array_access()?,
+                right if right.r#type.is_identifier()   => self.parse_identifier()?,
+                right if right.r#type.is_literal()      => self.parse_literal()?,
                 right => {
                     return Err(ParserError {
                         message: format!("Expected a identifier or literal, but found {:?}", right),
