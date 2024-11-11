@@ -3,7 +3,7 @@ name = "aspl"
 description = "A Simple Programming Language."
 license = "MIT"
 repository = "https://github.com/qxb3/aspl"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 [dependencies]
